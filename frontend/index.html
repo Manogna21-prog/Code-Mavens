@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SafeShift — Parametric Insurance</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ── Navigation Bar ─────────────────────────────────────────────── -->
+<nav class="navbar">
+    <div class="nav-brand">🛡️ SafeShift</div>
+    <div class="nav-links">
+        <a href="#" class="nav-link active" data-page="dashboard">Dashboard</a>
+        <a href="#" class="nav-link" data-page="register">Register</a>
+        <a href="#" class="nav-link" data-page="policy">Buy Policy</a>
+        <a href="#" class="nav-link" data-page="triggers">Check Triggers</a>
+        <a href="#" class="nav-link" data-page="pricing">Pricing</a>
+    </div>
+</nav>
+
+<!-- ── Dashboard Page ─────────────────────────────────────────────── -->
+<main id="page-dashboard" class="page active">
+    <div class="hero">
+        <h1>Welcome to SafeShift</h1>
+        <p>AI-Powered Parametric Income Insurance for India's LCV Delivery Partners</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-icon">🌧️</div>
+            <div class="stat-value">5</div>
+            <div class="stat-label">Disruptions Covered</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">⚡</div>
+            <div class="stat-value">&lt;10 min</div>
+            <div class="stat-label">Payout Speed (UPI)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">🤖</div>
+            <div class="stat-value">Zero-Touch</div>
+            <div class="stat-label">Claims Process</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">💰</div>
+            <div class="stat-value">₹80/week</div>
+            <div class="stat-label">Starting Premium</div>
+        </div>
+    </div>
+
+    <!-- Tier Comparison -->
+    <h2 class="section-title">Choose Your Coverage Tier</h2>
+    <div class="tier-grid">
+        <div class="tier-card tier-normal">
+            <div class="tier-badge">🟢 Normal</div>
+            <div class="tier-price">₹80<span>/week</span></div>
+            <ul class="tier-features">
+                <li>Max payout: ₹2,000/week</li>
+                <li>Heavy Rain: ₹1,000</li>
+                <li>GRAP-IV: ₹1,000</li>
+                <li>Cyclone: ₹1,200</li>
+                <li>Best for part-time drivers</li>
+            </ul>
+        </div>
+        <div class="tier-card tier-medium featured">
+            <div class="tier-popular">POPULAR</div>
+            <div class="tier-badge">🟡 Medium</div>
+            <div class="tier-price">₹120<span>/week</span></div>
+            <ul class="tier-features">
+                <li>Max payout: ₹3,000/week</li>
+                <li>Heavy Rain: ₹1,500</li>
+                <li>GRAP-IV: ₹1,500</li>
+                <li>Cyclone: ₹1,800</li>
+                <li>Best for regular drivers</li>
+            </ul>
+        </div>
+        <div class="tier-card tier-high">
+            <div class="tier-badge">🔴 High</div>
+            <div class="tier-price">₹160<span>/week</span></div>
+            <ul class="tier-features">
+                <li>Max payout: ₹4,000/week</li>
+                <li>Heavy Rain: ₹2,000</li>
+                <li>GRAP-IV: ₹2,000</li>
+                <li>Cyclone: ₹2,400</li>
+                <li>Best for full-time drivers</li>
+            </ul>
+        </div>
+    </div>
+</main>
+
+<!-- ── Driver Registration Page ───────────────────────────────────── -->
+<main id="page-register" class="page">
+    <div class="form-container">
+        <h2>🚛 Driver Registration</h2>
+        <p class="form-subtitle">Complete onboarding in under 3 minutes</p>
+
+        <form id="register-form">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" id="reg-name" placeholder="e.g. Rajesh Kumar" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Phone Number</label>
+                    <input type="tel" id="reg-phone" placeholder="+91 98765 43210" required>
+                </div>
+                <div class="form-group">
+                    <label>Aadhaar Number</label>
+                    <input type="text" id="reg-aadhaar" placeholder="1234 5678 9012" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Driving License</label>
+                    <input type="text" id="reg-dl" placeholder="DL-1420110012345" required>
+                </div>
+                <div class="form-group">
+                    <label>Vehicle RC</label>
+                    <input type="text" id="reg-rc" placeholder="DL01AB1234" required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Vehicle Type</label>
+                    <select id="reg-vehicle">
+                        <option value="Tata Ace">Tata Ace</option>
+                        <option value="Mahindra Bolero Pickup">Mahindra Bolero Pickup</option>
+                        <option value="Ashok Leyland Dost">Ashok Leyland Dost</option>
+                        <option value="Eicher Pro">Eicher Pro</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Chassis Number</label>
+                    <input type="text" id="reg-chassis" placeholder="MA1TBA..." required>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>UPI ID</label>
+                    <input type="text" id="reg-upi" placeholder="rajesh@upi" required>
+                </div>
+                <div class="form-group">
+                    <label>Language</label>
+                    <select id="reg-lang">
+                        <option value="hi">हिंदी (Hindi)</option>
+                        <option value="en">English</option>
+                        <option value="mr">मराठी (Marathi)</option>
+                        <option value="ta">தமிழ் (Tamil)</option>
+                        <option value="te">తెలుగు (Telugu)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Operating City</label>
+                    <select id="reg-city">
+                        <option value="delhi-ncr">Delhi-NCR</option>
+                        <option value="mumbai">Mumbai</option>
+                        <option value="bangalore">Bangalore</option>
+                        <option value="chennai">Chennai</option>
+                        <option value="pune">Pune</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Pincode</label>
+                    <input type="text" id="reg-pincode" placeholder="110001" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-block">Register Driver</button>
+        </form>
+
+        <div id="register-result" class="result-box hidden"></div>
+    </div>
+</main>
+
+<!-- ── Buy Policy Page ────────────────────────────────────────────── -->
+<main id="page-policy" class="page">
+    <div class="form-container">
+        <h2>📋 Buy Weekly Policy</h2>
+        <p class="form-subtitle">Select your tier and coverage week</p>
+
+        <form id="policy-form">
+            <div class="form-group">
+                <label>Driver ID</label>
+                <input type="text" id="pol-driver-id" placeholder="Paste driver ID from registration" required>
+            </div>
+            <div class="form-group">
+                <label>Coverage Tier</label>
+                <div class="tier-select">
+                    <label class="tier-radio">
+                        <input type="radio" name="tier" value="normal" checked>
+                        <span class="tier-option normal">🟢 Normal — ₹80/week</span>
+                    </label>
+                    <label class="tier-radio">
+                        <input type="radio" name="tier" value="medium">
+                        <span class="tier-option medium">🟡 Medium — ₹120/week</span>
+                    </label>
+                    <label class="tier-radio">
+                        <input type="radio" name="tier" value="high">
+                        <span class="tier-option high">🔴 High — ₹160/week</span>
+                    </label>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Week Start</label>
+                    <input type="date" id="pol-start" required>
+                </div>
+                <div class="form-group">
+                    <label>Week End</label>
+                    <input type="date" id="pol-end" required>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Purchase Policy</button>
+        </form>
+
+        <div id="policy-result" class="result-box hidden"></div>
+    </div>
+</main>
+
+<!-- ── Trigger Check Page ─────────────────────────────────────────── -->
+<main id="page-triggers" class="page">
+    <div class="form-container">
+        <h2>⚡ Check Parametric Triggers</h2>
+        <p class="form-subtitle">Detect active disruptions in a zone (mock data for demo)</p>
+
+        <form id="trigger-form">
+            <div class="form-row">
+                <div class="form-group">
+                    <label>City</label>
+                    <select id="trg-city">
+                        <option value="delhi">Delhi</option>
+                        <option value="mumbai">Mumbai</option>
+                        <option value="bangalore">Bangalore</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Zone Pincode</label>
+                    <select id="trg-pincode">
+                        <option value="110001">110001 — Delhi Central</option>
+                        <option value="400001">400001 — Mumbai South</option>
+                        <option value="560001">560001 — Bangalore</option>
+                    </select>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">🔍 Check Triggers Now</button>
+        </form>
+
+        <div id="trigger-result" class="result-box hidden"></div>
+    </div>
+</main>
+
+<!-- ── Pricing Calculator Page ────────────────────────────────────── -->
+<main id="page-pricing" class="page">
+    <div class="form-container">
+        <h2>🤖 Dynamic Premium Calculator</h2>
+        <p class="form-subtitle">FinalPremium = BasePremium + WeatherRisk + UBI</p>
+
+        <form id="pricing-form">
+            <div class="form-group">
+                <label>City</label>
+                <input type="text" id="prc-city" value="delhi-ncr">
+            </div>
+            <div class="form-group">
+                <label>Tier</label>
+                <select id="prc-tier">
+                    <option value="normal">🟢 Normal</option>
+                    <option value="medium">🟡 Medium</option>
+                    <option value="high">🔴 High</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Weather Risk Level</label>
+                <select id="prc-weather">
+                    <option value="normal">Normal (₹0)</option>
+                    <option value="moderate">Moderate Rain Forecast (+₹10)</option>
+                    <option value="high">Heavy Rain / Cyclone Forecast (+₹20)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>UBI Score: <span id="ubi-value">0.15</span></label>
+                <input type="range" id="prc-ubi" min="0" max="0.5" step="0.01" value="0.15">
+                <div class="range-labels">
+                    <span>Low risk (highway)</span>
+                    <span>High risk (flood zone)</span>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Calculate Premium</button>
+        </form>
+
+        <div id="pricing-result" class="result-box hidden"></div>
+    </div>
+</main>
+
+<!-- ── Toast Notification ─────────────────────────────────────────── -->
+<div id="toast" class="toast hidden"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,47 @@
+# SafeShift — Local Development Stack
+# Usage: docker-compose up -d
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL Database ────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: safeshift-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: safeshift_db
+      POSTGRES_USER: safeshift
+      POSTGRES_PASSWORD: safeshift_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/migrations/001_initial_schema.sql:/docker-entrypoint-initdb.d/001_initial_schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U safeshift -d safeshift_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ── FastAPI Backend ────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: safeshift-api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env.example
+    environment:
+      DATABASE_URL: postgresql://safeshift:safeshift_dev@postgres:5432/safeshift_db
+      MOCK_MODE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
