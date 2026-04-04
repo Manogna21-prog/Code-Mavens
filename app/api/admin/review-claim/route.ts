@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       .update({
         status: newStatus,
         admin_review_status: action === 'approve' ? 'approved' : 'rejected',
-        reviewed_by: profile.id,
+        reviewed_by: profile?.id ?? 'admin',
         reviewed_at: new Date().toISOString(),
         flag_reason: action === 'reject' && reason ? reason : undefined,
       } as never)
