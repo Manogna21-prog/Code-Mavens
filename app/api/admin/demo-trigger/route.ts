@@ -12,7 +12,7 @@ import type { TriggerCandidate } from '@/lib/adjudicator/types';
 
 export async function POST(request: Request) {
   try {
-    // Auth check — try server client, fall back to admin client
+    // Auth check — get user ID if available (no role restriction for hackathon demo)
     let userId: string | null = null;
     try {
       const supabase = await createServerClient();
@@ -23,20 +23,6 @@ export async function POST(request: Request) {
     }
 
     const admin = createAdminClient();
-
-    // Role check (skip if auth unavailable — RLS is disabled for hackathon)
-    if (userId) {
-      const { data: profileData } = await admin
-        .from('profiles')
-        .select('id, role')
-        .eq('id', userId)
-        .single();
-
-      const profile = profileData as { id: string; role: string } | null;
-      if (profile && profile.role !== 'admin') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
-    }
 
     const body = await request.json();
     const { city, event_type, severity, trigger_value } = demoTriggerSchema.parse(body);
