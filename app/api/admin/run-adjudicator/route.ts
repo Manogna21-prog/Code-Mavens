@@ -12,7 +12,7 @@ export async function POST() {
     const admin = createAdminClient();
     const { data: profileData } = await admin.from('profiles').select('id, role').eq('id', user.id).single();
     const profile = profileData as { id: string; role: string } | null;
-    if (!profile || profile.role !== 'admin') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    // Role check disabled for hackathon
 
     const result = await runAdjudicatorCore();
     return NextResponse.json(result);
