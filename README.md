@@ -292,7 +292,7 @@ FEEDBACK LOOP: Update claim history → Retrain pricing model
 | **Backend** | Python (FastAPI) — AI/ML microservice,Next.js API Routes (serverless functions),REST APIs with Swagger/OpenAPI (FastAPI auto-generated docs) |
 | **Database** | Supabase (PostgreSQL + Auth + Realtime) Row-Level Security policies |
 | **Streaming** | Apache Kafka / RabbitMQ |
-| **AI/ML** | Prophet / LSTM (TensorFlow), XGBoost / LightGBM, scikit-learn, spaCy |
+| **AI/ML** | XGBoost — rainfall and wind/cyclone prediction models,scikit-learn — preprocessing and feature engineering,|
 | **APIs** | CPCB, OpenWeatherMap, Open-Meteo, IMD, StatusGator, News Scrapers |
 | **DevOps** | Vercel — frontend + API routes, Hugging Face Spaces (Docker) — ML prediction service, Supabase Cloud — database hosting,GitHub Actions — cron-based adjudicator|
 | **Payments** | Razorpay (Test Mode) — premium collection + instant UPI payouts |
