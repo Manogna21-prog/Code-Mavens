@@ -71,7 +71,7 @@ export default function PaymentStep({ tier, city, onNext, onBack }: PaymentStepP
         <hr style={{ borderColor: 'var(--rule)' }} />
         <div className="flex justify-between items-center">
           <span className="sans text-base font-semibold" style={{ color: 'var(--ink)' }}>Weekly Premium</span>
-          <span className="serif text-xl font-bold" style={{ color: 'var(--teal)' }}>&#8377;{plan.weekly_premium_inr}</span>
+          <span className="serif text-xl font-bold" style={{ color: '#F07820' }}>&#8377;{plan.weekly_premium_inr}</span>
         </div>
       </div>
 
@@ -105,7 +105,7 @@ export default function PaymentStep({ tier, city, onNext, onBack }: PaymentStepP
           onClick={handlePay}
           disabled={processing}
           className="flex-1 py-3 rounded-lg font-medium transition-colors disabled:opacity-70"
-          style={{ background: 'var(--teal)', color: '#fff' }}
+          style={{ background: '#F07820', color: '#fff' }}
         >
           {processing ? 'Processing...' : `Pay \u20B9${plan.weekly_premium_inr}`}
         </button>
