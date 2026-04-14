@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
-import { Button } from '@/components/ui/button';
+
+const ORANGE = '#F07820';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -27,7 +28,6 @@ export default function RegisterPage() {
     }
 
     try {
-      // Create user via admin API (bypasses email verification & rate limits)
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -41,13 +41,9 @@ export default function RegisterPage() {
         return;
       }
 
-      // Now sign in with the created credentials
       const supabase = createClient();
       const loginEmail = data.email || email || `${phone}@safeshift.app`;
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: loginEmail,
-        password,
-      });
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
 
       if (signInError) {
         setError(`Account created! Please sign in with: ${loginEmail}`);
@@ -62,51 +58,97 @@ export default function RegisterPage() {
     }
   }
 
+  const inputStyle: React.CSSProperties = {
+    display: 'block', width: '100%', boxSizing: 'border-box',
+    padding: '0 1em', height: 48,
+    background: '#f9f9f9', border: `1.5px solid #1a1a1a`, borderRadius: 6,
+    fontSize: '0.95em', fontWeight: 500, color: '#1a1a1a',
+    outline: 'none', fontFamily: "'Inter', sans-serif",
+    transition: 'border-color .2s',
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: 'block', marginBottom: 6,
+    fontSize: '0.875em', fontWeight: 700, color: '#1a1a1a',
+    fontFamily: "'Inter', sans-serif",
+  };
+
   return (
-    <div className="rounded-xl p-6" style={{ background: 'var(--cream)', border: '1px solid var(--rule)' }}>
-      <h2 className="serif text-xl font-semibold mb-6" style={{ color: 'var(--ink)' }}>Create Account</h2>
-      <form onSubmit={handleRegister} className="space-y-4">
+    <div style={{ background: '#ffffff', borderRadius: 16, padding: '2em' }}>
+      <Link href="/" style={{
+        display: 'inline-flex', alignItems: 'center', gap: 4,
+        fontSize: '0.8rem', fontWeight: 600, color: '#888',
+        textDecoration: 'none', marginBottom: '1em',
+        fontFamily: "'Inter', sans-serif",
+        transition: 'color 0.15s',
+      }}
+        onMouseEnter={e => (e.currentTarget.style.color = '#F07820')}
+        onMouseLeave={e => (e.currentTarget.style.color = '#888')}
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+          <path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        Back
+      </Link>
+      <style>{`
+        .ss-reg-input:focus { border-color: ${ORANGE} !important; box-shadow: 0 0 0 3px rgba(240,120,32,0.15); }
+        .ss-register-btn { position:relative; overflow:hidden; background:#1a1a1a; color:#fff; }
+        .ss-register-btn::before { content:''; position:absolute; bottom:0; left:0; width:100%; height:0; background:${ORANGE}; transition:height 0.35s cubic-bezier(0.22,1,0.36,1); z-index:0; }
+        .ss-register-btn:hover:not(:disabled)::before { height:100%; }
+        .ss-register-btn > span { position:relative; z-index:1; }
+      `}</style>
+
+      <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1a1a1a', marginBottom: '1.25em', textAlign: 'center', fontFamily: "'Inter', sans-serif" }}>
+        Create Account
+      </h2>
+
+      <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '1em' }}>
+
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink-60)' }}>Full Name</label>
-          <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            style={{ border: '1px solid var(--rule)', background: 'transparent', color: 'var(--ink)' }}
-            placeholder="Rajesh Kumar" required />
+          <label style={labelStyle}>Full Name</label>
+          <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
+            className="ss-reg-input" style={inputStyle} placeholder="Rajesh Kumar" required />
         </div>
+
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink-60)' }}>Mobile Number</label>
-          <div className="flex">
-            <span className="mono inline-flex items-center px-3 rounded-l-lg text-sm" style={{ background: 'var(--cream-d)', border: '1px solid var(--rule)', borderRight: 'none', color: 'var(--ink-60)' }}>+91</span>
-            <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-              className="w-full px-3 py-2 rounded-r-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              style={{ border: '1px solid var(--rule)', background: 'transparent', color: 'var(--ink)' }}
+          <label style={labelStyle}>Mobile Number</label>
+          <div style={{ display: 'flex' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', padding: '0 12px', background: '#f0f0f0', border: '1.5px solid #1a1a1a', borderRight: 'none', borderRadius: '6px 0 0 6px', fontSize: '0.95em', color: '#555', fontFamily: "'Inter', sans-serif" }}>+91</span>
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              className="ss-reg-input" style={{ ...inputStyle, borderRadius: '0 6px 6px 0' }}
               placeholder="9876543210" required />
           </div>
         </div>
+
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink-60)' }}>
-            Email <span className="font-normal" style={{ color: 'var(--ink-30)' }}>(optional)</span>
+          <label style={labelStyle}>
+            Email <span style={{ fontWeight: 400, color: '#999' }}>(optional)</span>
           </label>
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            style={{ border: '1px solid var(--rule)', background: 'transparent', color: 'var(--ink)' }}
-            placeholder="driver@example.com" />
+          <input type="email" value={email} onChange={e => setEmail(e.target.value)}
+            className="ss-reg-input" style={inputStyle} placeholder="driver@example.com" />
         </div>
+
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink-60)' }}>Password</label>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-3 py-2 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-            style={{ border: '1px solid var(--rule)', background: 'transparent', color: 'var(--ink)' }}
-            placeholder="Min 6 characters" minLength={6} required />
+          <label style={labelStyle}>Password</label>
+          <input type="password" value={password} onChange={e => setPassword(e.target.value)}
+            className="ss-reg-input" style={inputStyle} placeholder="Min 6 characters" minLength={6} required />
         </div>
-        {error && <p className="text-sm" style={{ color: 'var(--red-acc)' }}>{error}</p>}
-        <Button type="submit" className="w-full" disabled={loading}>
-          {loading ? 'Creating account...' : 'Register'}
-        </Button>
+
+        {error && <p style={{ fontSize: '0.875rem', color: '#e53e3e' }}>{error}</p>}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="ss-register-btn"
+          style={{ height: 48, width: '100%', borderRadius: 6, border: 'none', color: '#fff', fontSize: '1em', fontWeight: 700, cursor: loading ? 'not-allowed' : 'pointer', fontFamily: "'Inter', sans-serif", opacity: loading ? 0.6 : 1 }}
+        >
+          <span>{loading ? 'Creating account…' : 'Register'}</span>
+        </button>
       </form>
-      <p className="sans text-center text-sm mt-4" style={{ color: 'var(--ink-60)' }}>
+
+      <p style={{ textAlign: 'center', fontSize: '0.875rem', marginTop: '1em', color: '#666', fontFamily: "'Inter', sans-serif" }}>
         Already have an account?{' '}
-        <Link href="/login" className="hover:underline" style={{ color: 'var(--teal)' }}>Sign in</Link>
+        <Link href="/login" style={{ color: ORANGE, fontWeight: 600 }}>Sign in</Link>
       </p>
     </div>
   );
