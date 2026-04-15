@@ -63,6 +63,100 @@ interface ChatMessage {
 
 const F = "var(--font-inter),'Inter',sans-serif";
 
+// ─── Simple markdown renderer ────────────────────────────────────────────────
+
+function renderMarkdown(text: string): React.ReactNode {
+  // Split into lines
+  const lines = text.split('\n');
+  const elements: React.ReactNode[] = [];
+  let listItems: string[] = [];
+  let listOrdered = false;
+
+  function flushList() {
+    if (listItems.length === 0) return;
+    const Tag = listOrdered ? 'ol' : 'ul';
+    elements.push(
+      <Tag key={`list-${elements.length}`} style={{
+        margin: '6px 0', paddingLeft: 20,
+        listStyleType: listOrdered ? 'decimal' : 'disc',
+      }}>
+        {listItems.map((item, i) => (
+          <li key={i} style={{ marginBottom: 3 }}>{inlineFormat(item)}</li>
+        ))}
+      </Tag>
+    );
+    listItems = [];
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // Unordered list item
+    const ulMatch = trimmed.match(/^[-*]\s+(.*)/);
+    if (ulMatch) {
+      if (listItems.length > 0 && listOrdered) flushList();
+      listOrdered = false;
+      listItems.push(ulMatch[1]);
+      continue;
+    }
+
+    // Ordered list item
+    const olMatch = trimmed.match(/^\d+[.)]\s+(.*)/);
+    if (olMatch) {
+      if (listItems.length > 0 && !listOrdered) flushList();
+      listOrdered = true;
+      listItems.push(olMatch[1]);
+      continue;
+    }
+
+    // Non-list line — flush any pending list
+    flushList();
+
+    // Empty line
+    if (trimmed === '') {
+      elements.push(<div key={`br-${i}`} style={{ height: 6 }} />);
+      continue;
+    }
+
+    // Regular paragraph
+    elements.push(
+      <p key={`p-${i}`} style={{ margin: '2px 0' }}>{inlineFormat(trimmed)}</p>
+    );
+  }
+
+  flushList();
+  return <>{elements}</>;
+}
+
+function inlineFormat(text: string): React.ReactNode {
+  // Process **bold** and split into segments
+  const parts: React.ReactNode[] = [];
+  const regex = /\*\*(.+?)\*\*/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    parts.push(
+      <strong key={match.index} style={{ fontWeight: 700, color: '#1A1A1A' }}>
+        {match[1]}
+      </strong>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(text.slice(lastIndex));
+  }
+
+  return parts.length === 1 ? parts[0] : <>{parts}</>;
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+
 export default function AIAssistantPage() {
   const router = useRouter();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -207,7 +301,7 @@ export default function AIAssistantPage() {
                   </span>
                 </div>
               )}
-              {m.text}
+              {m.role === 'ai' ? renderMarkdown(m.text) : m.text}
             </div>
           ))}
 
