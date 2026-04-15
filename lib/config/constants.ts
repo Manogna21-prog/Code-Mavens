@@ -33,6 +33,7 @@ export type ClaimStatus = (typeof CLAIM_STATUSES)[number];
 
 // --- Onboarding Steps ---
 export const ONBOARDING_STEPS = [
+  'registered',
   'language_selected',
   'aadhaar_verified',
   'documents_uploaded',

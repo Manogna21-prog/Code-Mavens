@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { getWeekStart, getWeekEnd, formatDate } from '@/lib/utils/date';
+import { getWeekStart, getWeekEnd, getNextMonday, formatDate } from '@/lib/utils/date';
 
 /**
  * POST /api/payments/simulate-payout
@@ -44,6 +44,9 @@ export async function POST(request: Request) {
     }
 
     // Create demo policy
+    // claim_active_from = next Monday (1-week waiting period per product rules)
+    const claimActiveFrom = formatDate(getNextMonday());
+
     const { data: policy, error } = await admin
       .from('weekly_policies')
       .insert({
@@ -51,6 +54,7 @@ export async function POST(request: Request) {
         plan_id: p.id,
         week_start_date: weekStart,
         week_end_date: weekEnd,
+        claim_active_from: claimActiveFrom,
         base_premium_inr: p.weekly_premium_inr,
         weather_risk_addon: 0,
         ubi_addon: 0,

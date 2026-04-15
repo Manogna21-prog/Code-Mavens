@@ -17,7 +17,7 @@ CREATE TYPE claim_status AS ENUM (
 CREATE TYPE tier_type AS ENUM ('normal', 'medium', 'high');
 
 CREATE TYPE onboarding_status AS ENUM (
-  'language_selected', 'aadhaar_verified', 'documents_uploaded',
+  'registered', 'language_selected', 'aadhaar_verified', 'documents_uploaded',
   'upi_verified', 'city_selected', 'tier_selected', 'payment_done', 'complete'
 );
 
@@ -57,7 +57,7 @@ CREATE TABLE profiles (
   city                  TEXT,
   zone_latitude         NUMERIC(10,6),
   zone_longitude        NUMERIC(10,6),
-  onboarding_status     onboarding_status DEFAULT 'language_selected',
+  onboarding_status     onboarding_status DEFAULT 'registered',
   role                  TEXT DEFAULT 'driver' CHECK (role IN ('driver', 'admin')),
   trust_score           NUMERIC(3,2) DEFAULT 0.50,
   referral_code         TEXT UNIQUE,
