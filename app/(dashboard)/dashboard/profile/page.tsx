@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Shield, Sun, MessageCircle, Bell, CreditCard, Globe, Headphones, Phone, Download, ChevronRight } from 'lucide-react';
+import { Shield, Sun, Bell, CreditCard, Globe, Headphones, Phone, Download, ChevronRight } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -13,7 +13,16 @@ interface ProfileData {
   upi_id:       string | null;
   trust_score:  number;
   member_since: string;
+  language:     string;
 }
+
+const LANGUAGES = [
+  { code: 'en', label: 'English' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'te', label: 'తెలుగు' },
+  { code: 'ta', label: 'தமிழ்' },
+  { code: 'ml', label: 'മലയാളം' },
+];
 
 interface Stats {
   policies: number;
@@ -126,6 +135,8 @@ export default function ProfilePage() {
   const [stats, setStats]       = useState<Stats>({ policies: 0, claims: 0, streak: 0 });
   const [loading, setLoading]   = useState(true);
   const [darkMode, setDarkMode] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
+  const [savingLang, setSavingLang] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -136,7 +147,7 @@ export default function ProfilePage() {
 
         const [profileRes, walletRes, policiesRes, streakRes] = await Promise.all([
           supabase.from('profiles')
-            .select('full_name, phone_number, city, upi_id, trust_score')
+            .select('full_name, phone_number, city, upi_id, trust_score, language')
             .eq('id', user.id).single(),
           supabase.from('driver_wallet')
             .select('total_claims')
@@ -154,6 +165,7 @@ export default function ProfilePage() {
         const row = profileRes.data as unknown as {
           full_name: string | null; phone_number: string | null;
           city: string | null; upi_id: string | null; trust_score: number;
+          language: string;
         } | null;
         if (!row) { window.location.href = '/login'; return; }
 
@@ -172,6 +184,7 @@ export default function ProfilePage() {
           city:         row.city,
           upi_id:       row.upi_id,
           trust_score:  row.trust_score,
+          language:     row.language || 'en',
           member_since: user.created_at,
         });
         setStats({
@@ -188,8 +201,22 @@ export default function ProfilePage() {
     load();
   }, []);
 
+  async function changeLanguage(code: string) {
+    if (!profile || code === profile.language) { setLangOpen(false); return; }
+    setSavingLang(true);
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (user) {
+      await supabase.from('profiles').update({ language: code } as never).eq('id', user.id);
+      setProfile({ ...profile, language: code });
+    }
+    setSavingLang(false);
+    setLangOpen(false);
+  }
+
   if (loading || !profile) return <LoadingSkeleton />;
 
+  const currentLangLabel = LANGUAGES.find(l => l.code === profile.language)?.label || 'English';
   const cityFull   = CITY_NAMES[profile.city || ''] || (profile.city || 'City');
   const initial    = (profile.full_name || 'D')[0].toUpperCase();
   const tier       = tierLabel(profile.trust_score);
@@ -338,31 +365,60 @@ export default function ProfilePage() {
         {/* ══ 6. Settings Menu Card ══ */}
         {(() => {
           const MENU_ROWS = [
-            { Icon: Bell,        label: 'Notification Settings' },
-            { Icon: CreditCard,  label: 'Payment Methods'       },
-            { Icon: Globe,       label: 'Language / भाषा'       },
-            { Icon: Headphones,  label: 'Help & Support'        },
-            { Icon: Phone,       label: 'Emergency Contact'     },
-            { Icon: Download,    label: 'Download My Data'      },
+            { Icon: Bell,        label: 'Notification Settings', action: () => {} },
+            { Icon: CreditCard,  label: 'Payment Methods',       action: () => {} },
+            { Icon: Globe,       label: `Language · ${currentLangLabel}`, action: () => setLangOpen(!langOpen) },
+            { Icon: Headphones,  label: 'Help & Support',        action: () => {} },
+            { Icon: Phone,       label: 'Emergency Contact',     action: () => {} },
+            { Icon: Download,    label: 'Download My Data',      action: () => {} },
           ];
           return (
             <div style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16, overflow: 'hidden' }}>
-              {MENU_ROWS.map(({ Icon, label }, i) => (
-                <div
-                  key={label}
-                  onClick={() => {}}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '16px 20px', cursor: 'pointer',
-                    borderBottom: i < MENU_ROWS.length - 1 ? '1px solid #F3F4F6' : 'none',
-                    transition: 'background 0.15s ease',
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <Icon size={21} color="#9CA3AF" strokeWidth={1.8} style={{ flexShrink: 0 }} />
-                  <span style={{ flex: 1, fontSize: 16, color: '#1A1A1A', fontFamily: F }}>{label}</span>
-                  <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0 }} />
+              {MENU_ROWS.map(({ Icon, label, action }, i) => (
+                <div key={label}>
+                  <div
+                    onClick={action}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 14,
+                      padding: '16px 20px', cursor: 'pointer',
+                      borderBottom: (i < MENU_ROWS.length - 1 && !(i === 2 && langOpen)) ? '1px solid #F3F4F6' : 'none',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#F9FAFB')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <Icon size={21} color="#9CA3AF" strokeWidth={1.8} style={{ flexShrink: 0 }} />
+                    <span style={{ flex: 1, fontSize: 16, color: '#1A1A1A', fontFamily: F }}>{label}</span>
+                    <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: i === 2 && langOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+                  </div>
+
+                  {/* Language picker — expands below the Language row */}
+                  {i === 2 && langOpen && (
+                    <div style={{
+                      padding: '8px 20px 16px', background: '#F9FAFB',
+                      borderBottom: '1px solid #F3F4F6',
+                      display: 'flex', flexWrap: 'wrap', gap: 8,
+                    }}>
+                      {LANGUAGES.map((l) => (
+                        <button
+                          key={l.code}
+                          onClick={() => changeLanguage(l.code)}
+                          disabled={savingLang}
+                          style={{
+                            padding: '8px 16px', borderRadius: 20,
+                            border: profile.language === l.code ? '1.5px solid #F07820' : '1px solid #E5E7EB',
+                            background: profile.language === l.code ? '#FEF3E8' : '#ffffff',
+                            color: profile.language === l.code ? '#F07820' : '#374151',
+                            fontSize: 14, fontWeight: profile.language === l.code ? 700 : 500,
+                            cursor: savingLang ? 'wait' : 'pointer',
+                            fontFamily: F, transition: 'all 0.15s',
+                          }}
+                        >
+                          {l.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -374,28 +430,6 @@ export default function ProfilePage() {
 
       </div>
 
-      {/* ══ Floating AI Chat Button ══ */}
-      <button
-        aria-label="AI Chat"
-        style={{
-          position: 'fixed', bottom: 90, right: 20, zIndex: 50,
-          width: 56, height: 56, borderRadius: '50%',
-          background: 'linear-gradient(135deg, #F07820, #1A40C0)',
-          border: 'none', cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}
-      >
-        <MessageCircle size={24} color="#fff" strokeWidth={2} />
-        <span style={{
-          position: 'absolute', top: -2, right: -2,
-          background: '#EF4444', color: '#fff',
-          fontSize: 10, fontWeight: 700,
-          borderRadius: 9, padding: '2px 5px',
-          fontFamily: F, lineHeight: 1.4,
-          border: '1.5px solid #F6F7F9',
-        }}>AI</span>
-      </button>
     </div>
   );
 }

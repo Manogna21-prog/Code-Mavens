@@ -9,6 +9,8 @@ import {
   Check, Phone, Users2,
   AlertTriangle, HeartPulse, Sun, Cloud, CloudDrizzle,
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { getTranslator } from '@/lib/i18n/translations';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -44,13 +46,13 @@ const CITY_NAMES: Record<string, string> = {
   ahmedabad: 'Ahmedabad', jaipur: 'Jaipur', lucknow: 'Lucknow',
 };
 
-function getGreeting(): string {
+function getGreetingKey(): string {
   const now = new Date();
   const utc = now.getTime() + now.getTimezoneOffset() * 60000;
   const h = new Date(utc + 5.5 * 3600000).getHours();
-  if (h < 12) return 'Good morning';
-  if (h < 17) return 'Good afternoon';
-  return 'Good evening';
+  if (h < 12) return 'greeting.morning';
+  if (h < 17) return 'greeting.afternoon';
+  return 'greeting.evening';
 }
 
 function zoneName(z: ZoneEntry): string { return z.zone_name || z.name || 'Unknown'; }
@@ -180,8 +182,19 @@ function ErrorState() {
 export default function DashboardHomePage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userLang, setUserLang] = useState('en');
 
   useEffect(() => {
+    // Fetch user language from profile
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from('profiles').select('language').eq('id', user.id).single()
+        .then(({ data: p }) => {
+          if (p && (p as { language: string }).language) setUserLang((p as { language: string }).language);
+        });
+    });
+
     // Phase 1: Fast load (DB only, ~500 ms)
     fetch('/api/driver/dashboard?fast=1')
       .then((res) => { if (!res.ok) throw new Error(); return res.json(); })
@@ -200,6 +213,9 @@ export default function DashboardHomePage() {
 
   if (loading) return <LoadingSkeleton />;
   if (!data)   return <ErrorState />;
+
+  // ── i18n ──────────────────────────────────────────────────────────────────
+  const t = getTranslator(userLang);
 
   // ── Derived values ────────────────────────────────────────────────────────
   const cityName      = CITY_NAMES[data.profile.city] || data.profile.city;
@@ -235,10 +251,10 @@ export default function DashboardHomePage() {
     : `Weather looks stable in ${cityName}. Lock in your current rate of ₹${data.policy?.premium ?? '--'}/wk now.`;
 
   // GigPoints tier
-  const gigTier = data.coins.balance >= 3000 ? 'Elite Tier'
-    : data.coins.balance >= 1500 ? 'Pro Tier'
-    : data.coins.balance >= 500  ? 'Reliable Tier'
-    : 'Starter Tier';
+  const gigTier = data.coins.balance >= 3000 ? t('tier.elite')
+    : data.coins.balance >= 1500 ? t('tier.pro')
+    : data.coins.balance >= 500  ? t('tier.reliable')
+    : t('tier.starter');
 
   // Net savings ROI (only show if there are earnings)
   const roiPct = data.wallet.total_earned > 0 && data.policy
@@ -292,7 +308,7 @@ export default function DashboardHomePage() {
   // ── Zone Pool (derived from available data) ────────────────────────────────
   const poolZoneName = driverZoneName;
   const poolMembers  = 28 + (Object.keys(CITY_NAMES).indexOf(data.profile.city) + 1) * 2;
-  const poolHealth   = data.zone_status === 'safe' ? 'Strong' : data.zone_status === 'alert' ? 'Moderate' : 'Low';
+  const poolHealth   = data.zone_status === 'safe' ? t('pool.healthStrong') : data.zone_status === 'alert' ? t('pool.healthModerate') : t('pool.healthLow');
   const poolContrib  = data.policy ? Math.round(data.policy.premium * 0.1) : 10;
 
   // ── Filled streak count ────────────────────────────────────────────────────
@@ -335,7 +351,7 @@ export default function DashboardHomePage() {
         <div className="dsh-s" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
             <p style={{ fontSize: 16, color: '#6B6B6B', margin: 0, lineHeight: 1.3, fontFamily: F }}>
-              {getGreeting()},
+              {t(getGreetingKey())},
             </p>
             <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A1A', margin: '4px 0 0', lineHeight: 1.2, letterSpacing: '-0.03em', fontFamily: F }}>
               {data.profile.full_name || 'Driver'}
@@ -394,7 +410,7 @@ export default function DashboardHomePage() {
                 animation: data.zone_status !== 'safe' ? 'dsh-pulse 1.5s ease-in-out infinite' : 'none',
               }} />
               <span style={{ fontSize: 18, fontWeight: 700, color: zoneDotColor, fontFamily: F }}>
-                ZONE {data.zone_status.toUpperCase()}
+                {t(`zone.${data.zone_status}`)}
               </span>
             </div>
             <ChevronRight size={20} color="#9CA3AF" />
@@ -411,9 +427,9 @@ export default function DashboardHomePage() {
           {/* Weather stats */}
           <div style={{ display: 'flex' }}>
             {([
-              { Icon: CloudRain,   label: 'Rain', value: `${data.weather?.current_rain_mm ?? 0}mm` },
-              { Icon: Thermometer, label: 'Temp', value: `${data.weather?.current_temp != null ? Math.round(data.weather.current_temp) : '--'}°C` },
-              { Icon: Wind,        label: 'AQI',  value: `${data.weather?.current_aqi  || '--'}` },
+              { Icon: CloudRain,   label: t('zone.rain'), value: `${data.weather?.current_rain_mm ?? 0}mm` },
+              { Icon: Thermometer, label: t('zone.temp'), value: `${data.weather?.current_temp != null ? Math.round(data.weather.current_temp) : '--'}°C` },
+              { Icon: Wind,        label: t('zone.aqi'),  value: `${data.weather?.current_aqi  || '--'}` },
             ] as const).map(({ Icon, label, value }, i) => (
               <div
                 key={label}
@@ -439,7 +455,7 @@ export default function DashboardHomePage() {
             {/* Header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: F }}>
-                Active Policy
+                {t('policy.active')}
               </span>
               <span style={{
                 fontSize: 13, fontWeight: 600, color: '#F07820',
@@ -455,12 +471,12 @@ export default function DashboardHomePage() {
               <span style={{ fontSize: 44, fontWeight: 800, color: '#1A1A1A', lineHeight: 1, letterSpacing: '-0.03em', fontFamily: F }}>
                 ₹{Number(data.policy.max_payout).toLocaleString('en-IN')}
               </span>
-              <span style={{ fontSize: 16, color: '#6B7280', fontFamily: F }}>/week max</span>
+              <span style={{ fontSize: 16, color: '#6B7280', fontFamily: F }}>{t('policy.weekMax')}</span>
             </div>
 
             {/* Validity */}
             <p style={{ fontSize: 14, color: '#4B5563', margin: '0 0 12px', fontFamily: F }}>
-              Valid {fmtDate(data.policy.week_start)} – {fmtDate(data.policy.week_end)}
+              {t('policy.valid')} {fmtDate(data.policy.week_start)} – {fmtDate(data.policy.week_end)}
             </p>
 
             {/* Progress bar */}
@@ -474,14 +490,14 @@ export default function DashboardHomePage() {
 
             {/* Labels */}
             <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 13, color: '#6B7280', fontFamily: F }}>{daysLeft} of 7 days remaining</span>
+              <span style={{ fontSize: 13, color: '#6B7280', fontFamily: F }}>{t('policy.daysRemaining', { n: daysLeft })}</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#F07820', fontFamily: F }}>₹{data.policy.premium}/wk</span>
             </div>
           </div>
         ) : (
           <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s', textAlign: 'center', padding: '28px 20px' }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: '#F07820', marginBottom: 4, fontFamily: F }}>No Active Policy</p>
-            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, fontFamily: F }}>Get covered from as low as ₹80/week</p>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#F07820', marginBottom: 4, fontFamily: F }}>{t('policy.none')}</p>
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, fontFamily: F }}>{t('policy.noneDesc')}</p>
             <Link
               href="/onboarding"
               style={{
@@ -490,7 +506,7 @@ export default function DashboardHomePage() {
                 textDecoration: 'none', fontFamily: F,
               }}
             >
-              Get Covered
+              {t('policy.getCovered')}
             </Link>
           </div>
         )}
@@ -506,7 +522,7 @@ export default function DashboardHomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <TrendingUp size={18} color="#1A40C0" strokeWidth={2} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Premium Forecast</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('forecast.title')}</span>
             </div>
             <span style={{
               fontSize: 12, fontWeight: 600, color: '#EA580C',
@@ -540,7 +556,7 @@ export default function DashboardHomePage() {
           <div id="card-gigpoints" className="dsh-card" style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <Award size={18} color="#9CA3AF" strokeWidth={1.5} />
-              <span style={{ fontSize: 14, color: '#4B5563', fontFamily: F }}>GigPoints</span>
+              <span style={{ fontSize: 14, color: '#4B5563', fontFamily: F }}>{t('stats.gigpoints')}</span>
             </div>
             <p style={{ fontSize: 34, fontWeight: 800, color: '#F07820', letterSpacing: '-0.03em', lineHeight: 1, margin: '0 0 8px', fontFamily: F }}>
               {Number(data.coins.balance).toLocaleString('en-IN')}
@@ -560,7 +576,7 @@ export default function DashboardHomePage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <TrendingUp size={16} color="rgba(255,255,255,0.85)" strokeWidth={2} />
-              <span style={{ fontSize: 14, color: '#fff', fontFamily: F }}>Net Savings</span>
+              <span style={{ fontSize: 14, color: '#fff', fontFamily: F }}>{t('stats.netSavings')}</span>
             </div>
             <p style={{ fontSize: 34, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1, margin: '0 0 8px', fontFamily: F }}>
               ₹{Number(data.wallet.total_earned).toLocaleString('en-IN')}
@@ -568,7 +584,7 @@ export default function DashboardHomePage() {
             {roiPct !== null ? (
               <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', fontFamily: F }}>{roiPct}% ROI</span>
             ) : (
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', fontFamily: F }}>No claims yet</span>
+              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', fontFamily: F }}>{t('stats.noClaims')}</span>
             )}
           </div>
         </div>
@@ -581,10 +597,10 @@ export default function DashboardHomePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Flame size={18} color="#F59E0B" strokeWidth={2} />
               <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>
-                {data.streak > 0 ? `${data.streak}-Week Streak` : 'Start Your Streak'}
+                {data.streak > 0 ? t('streak.title', { n: data.streak }) : t('streak.start')}
               </span>
             </div>
-            <span style={{ fontSize: 14, color: '#6B7280', fontFamily: F }}>+75 pts/week</span>
+            <span style={{ fontSize: 14, color: '#6B7280', fontFamily: F }}>{t('streak.ptsWeek')}</span>
           </div>
 
           <div style={{ display: 'flex', gap: 6 }}>
@@ -624,13 +640,13 @@ export default function DashboardHomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <BellRing size={18} color="#F07820" strokeWidth={2} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Smart Reminders</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('reminders.title')}</span>
             </div>
             <span style={{
               fontSize: 12, fontWeight: 600, color: '#7C3AED',
               background: '#EDE9FE', border: '1px solid #C4B5FD',
               borderRadius: 20, padding: '4px 14px', fontFamily: F,
-            }}>AI-Powered</span>
+            }}>{t('reminders.aiPowered')}</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -670,14 +686,14 @@ export default function DashboardHomePage() {
             textTransform: 'uppercase', letterSpacing: '1px',
             margin: '0 0 16px', fontFamily: F,
           }}>
-            Quick Actions
+            {t('actions.title')}
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
             {([
-              { label: 'Claims',  Icon: ClipboardCheck, color: '#F07820', bg: '#FEF3E8', href: '/dashboard/claims'  },
-              { label: 'Wallet',  Icon: CreditCard,     color: '#1A40C0', bg: '#EEF2FF', href: '/dashboard/wallet'  },
-              { label: 'Rewards', Icon: Users,          color: '#0EA5E9', bg: '#E0F2FE', href: '/dashboard/rewards' },
-              { label: 'Help',    Icon: Headphones,     color: '#F59E0B', bg: '#FEF3C7', href: '/contact'           },
+              { label: t('actions.claims'),  Icon: ClipboardCheck, color: '#F07820', bg: '#FEF3E8', href: '/dashboard/claims'  },
+              { label: t('actions.wallet'),  Icon: CreditCard,     color: '#1A40C0', bg: '#EEF2FF', href: '/dashboard/wallet'  },
+              { label: t('actions.rewards'), Icon: Users,          color: '#0EA5E9', bg: '#E0F2FE', href: '/dashboard/rewards' },
+              { label: t('actions.help'),    Icon: Headphones,     color: '#F59E0B', bg: '#FEF3C7', href: '/contact'           },
             ] as const).map(({ label, Icon, color, bg, href }) => (
               <Link key={label} href={href} style={{ textDecoration: 'none' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
@@ -702,16 +718,16 @@ export default function DashboardHomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Users2 size={18} color="#F07820" strokeWidth={1.8} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Zone Pool</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('pool.title')}</span>
             </div>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#F07820', fontFamily: F }}>{poolZoneName}</span>
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
             {([
-              { value: String(poolMembers),                                           label: 'Members'      },
-              { value: `₹${(poolMembers * poolContrib).toLocaleString('en-IN')}`,    label: 'Pool Balance' },
-              { value: poolHealth,                                                     label: 'Health'       },
+              { value: String(poolMembers),                                           label: t('pool.members')  },
+              { value: `₹${(poolMembers * poolContrib).toLocaleString('en-IN')}`,    label: t('pool.balance')  },
+              { value: poolHealth,                                                     label: t('pool.health')   },
             ] as const).map(({ value, label }) => (
               <div key={label} style={{
                 flex: 1, background: '#FEF3E8',
@@ -726,7 +742,7 @@ export default function DashboardHomePage() {
           </div>
 
           <p style={{ fontSize: 13, color: '#6B7280', margin: 0, lineHeight: 1.4, fontFamily: F }}>
-            Your contribution: ₹{poolContrib}/week · Covers ~2 below-threshold events
+            {t('pool.contribution', { n: poolContrib })}
           </p>
         </div>
 
@@ -737,16 +753,16 @@ export default function DashboardHomePage() {
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, fontFamily: F }}>
-              Today&apos;s Activity
+              {t('activity.title')}
             </p>
-            <span style={{ fontSize: 14, color: '#7C3AED', cursor: 'pointer', fontFamily: F }}>See All</span>
+            <span style={{ fontSize: 14, color: '#7C3AED', cursor: 'pointer', fontFamily: F }}>{t('activity.seeAll')}</span>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             {/* Row 1 — Rainfall / alert trigger */}
             {(() => {
               const hasAlert = data.alerts.length > 0;
-              const alertLabel = hasAlert ? (data.alerts[0].event_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) : 'Rainfall Trigger';
+              const alertLabel = hasAlert ? (data.alerts[0].event_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) : t('activity.rainfallTrigger');
               const alertPayout = data.policy ? Math.round(data.policy.max_payout * 0.5) : 600;
               return (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -776,7 +792,7 @@ export default function DashboardHomePage() {
                 <Shield size={20} color="#F07820" strokeWidth={1.8} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A', margin: '0 0 2px', fontFamily: F }}>Policy Active</p>
+                <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A', margin: '0 0 2px', fontFamily: F }}>{t('activity.policyActive')}</p>
                 <p style={{ fontSize: 13, color: '#9CA3AF', margin: 0, fontFamily: F }}>
                   {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {data.policy?.name || data.policy?.tier || 'No Plan'}
                 </p>
@@ -800,9 +816,9 @@ export default function DashboardHomePage() {
             </div>
             {/* Content */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: '#F97316', margin: '0 0 6px', fontFamily: F }}>Coverage Gap Alert</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: '#F97316', margin: '0 0 6px', fontFamily: F }}>{t('gap.title')}</p>
               <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.5, margin: '0 0 14px', fontFamily: F }}>
-                {poolMembers} active workers in your zone received payouts today. Stay protected for upcoming events.
+                {t('gap.desc', { n: poolMembers })}
               </p>
               <button style={{
                 background: 'linear-gradient(to right, #F07820, #d96010)',
@@ -810,7 +826,7 @@ export default function DashboardHomePage() {
                 fontSize: 14, fontWeight: 600, padding: '12px 24px',
                 borderRadius: 24, fontFamily: F,
               }}>
-                Enable Auto-Renew
+                {t('gap.autoRenew')}
               </button>
             </div>
           </div>
@@ -827,9 +843,9 @@ export default function DashboardHomePage() {
             </div>
             {/* Text */}
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', margin: '0 0 3px', fontFamily: F }}>Emergency SOS</p>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', margin: '0 0 3px', fontFamily: F }}>{t('sos.title')}</p>
               <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.4, margin: 0, fontFamily: F }}>
-                Accident, health emergency, or safety issue
+                {t('sos.desc')}
               </p>
             </div>
             {/* SOS button */}
@@ -837,7 +853,7 @@ export default function DashboardHomePage() {
               border: '1.5px solid #FECACA', background: '#FFF1F2',
               borderRadius: 12, padding: '10px 18px', cursor: 'pointer', flexShrink: 0,
             }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#F87171', fontFamily: F }}>SOS</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: '#F87171', fontFamily: F }}>{t('sos.btn')}</span>
             </button>
           </div>
         </div>
@@ -847,7 +863,7 @@ export default function DashboardHomePage() {
         ══════════════════════════════════════════ */}
         <div className="dsh-s dsh-card" style={{ animationDelay: '0.6s' }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 16px', fontFamily: F }}>
-            Live Weather Radar
+            {t('radar.title')}
           </p>
 
           {/* 4 time slots */}
@@ -884,7 +900,7 @@ export default function DashboardHomePage() {
           {/* Warning footer */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <AlertTriangle size={14} color="#F59E0B" strokeWidth={2} />
-            <span style={{ fontSize: 13, color: '#D97706', fontFamily: F }}>Trigger likely at 4PM — Stay protected!</span>
+            <span style={{ fontSize: 13, color: '#D97706', fontFamily: F }}>{t('radar.triggerWarning')}</span>
           </div>
         </div>
 
@@ -893,18 +909,18 @@ export default function DashboardHomePage() {
         ══════════════════════════════════════════ */}
         <div className="dsh-s dsh-card" style={{ animationDelay: '0.65s' }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>
-            Earnings Impact
+            {t('earnings.title')}
           </p>
 
           {/* Comparison row */}
           <div style={{ display: 'flex', alignItems: 'stretch', marginBottom: 16 }}>
             {/* Left: without coverage */}
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px', fontFamily: F }}>Without SafeShift</p>
+              <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px', fontFamily: F }}>{t('earnings.without')}</p>
               <p style={{ fontSize: 30, fontWeight: 800, color: '#F87171', lineHeight: 1, margin: '0 0 4px', letterSpacing: '-0.03em', fontFamily: F }}>
                 -₹{(data.wallet.total_earned + (data.policy?.premium ?? 100)).toLocaleString('en-IN')}
               </p>
-              <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, fontFamily: F }}>Lost to disruptions</p>
+              <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, fontFamily: F }}>{t('earnings.lost')}</p>
             </div>
 
             {/* Vertical divider */}
@@ -912,11 +928,11 @@ export default function DashboardHomePage() {
 
             {/* Right: with coverage */}
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px', fontFamily: F }}>With SafeShift</p>
+              <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px', fontFamily: F }}>{t('earnings.with')}</p>
               <p style={{ fontSize: 30, fontWeight: 800, color: '#F07820', lineHeight: 1, margin: '0 0 4px', letterSpacing: '-0.03em', fontFamily: F }}>
                 +₹{Number(data.wallet.total_earned).toLocaleString('en-IN')}
               </p>
-              <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, fontFamily: F }}>Net protected</p>
+              <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, fontFamily: F }}>{t('earnings.protected')}</p>
             </div>
           </div>
 
@@ -931,7 +947,7 @@ export default function DashboardHomePage() {
 
           {/* Footer */}
           <p style={{ fontSize: 13, color: '#F07820', margin: 0, lineHeight: 1.4, fontFamily: F }}>
-            You&apos;re in the top 15% of protected earners in your zone
+            {t('earnings.top')}
           </p>
         </div>
 
