@@ -51,13 +51,21 @@ const TEMPLATES: TemplateAction[] = [
 // ─── Highlight helper ────────────────────────────────────────────────────────
 
 function highlightElement(id: string) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.classList.remove('ai-highlight');
-  void el.offsetWidth;
-  el.classList.add('ai-highlight');
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  setTimeout(() => el.classList.remove('ai-highlight'), 2800);
+  // Poll for the element — it may not exist yet if the page is still loading data
+  let attempts = 0;
+  const interval = setInterval(() => {
+    const el = document.getElementById(id);
+    if (el) {
+      clearInterval(interval);
+      el.classList.remove('ai-highlight');
+      void el.offsetWidth;
+      el.classList.add('ai-highlight');
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => el.classList.remove('ai-highlight'), 2800);
+    }
+    attempts++;
+    if (attempts > 25) clearInterval(interval); // give up after ~5s
+  }, 200);
 }
 
 // ─── Language options ────────────────────────────────────────────────────────
@@ -254,7 +262,8 @@ export default function AIAssistantPage() {
 
   function handleTemplate(t: TemplateAction) {
     router.push(t.route);
-    setTimeout(() => highlightElement(t.elementId), 600);
+    // highlightElement now polls for the element, so no fixed delay needed
+    highlightElement(t.elementId);
   }
 
   async function handleSend() {
