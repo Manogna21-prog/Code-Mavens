@@ -1,5 +1,4 @@
-import BottomNav from '@/components/driver/BottomNav';
-import AIChatPanel from '@/components/driver/AIChatPanel';
+import DashboardShell from '@/components/driver/DashboardShell';
 
 export default function DashboardLayout({
   children,
@@ -11,8 +10,7 @@ export default function DashboardLayout({
       <main className="pb-20 max-w-lg mx-auto">
         {children}
       </main>
-      <BottomNav />
-      <AIChatPanel />
+      <DashboardShell />
     </div>
   );
 }
