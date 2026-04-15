@@ -1,8 +1,16 @@
 'use client';
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+declare global {
+  interface Window {
+    SpeechRecognition: any;
+    webkitSpeechRecognition: any;
+  }
+}
+
 import { useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { Sparkles, ArrowRight, Send, Loader2 } from 'lucide-react';
+import { Sparkles, ArrowRight, Send, Loader2, Mic, MicOff, Volume2 } from 'lucide-react';
 
 // ─── Template questions → navigation + highlight targets ─────────────────────
 
@@ -51,6 +59,16 @@ function highlightElement(id: string) {
   el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   setTimeout(() => el.classList.remove('ai-highlight'), 2800);
 }
+
+// ─── Language options ────────────────────────────────────────────────────────
+
+const LANGUAGES = [
+  { code: 'en', label: 'English', bcp47: 'en-IN' },
+  { code: 'hi', label: 'हिन्दी', bcp47: 'hi-IN' },
+  { code: 'te', label: 'తెలుగు', bcp47: 'te-IN' },
+  { code: 'ta', label: 'தமிழ்', bcp47: 'ta-IN' },
+  { code: 'ml', label: 'മലയാളം', bcp47: 'ml-IN' },
+] as const;
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -162,7 +180,77 @@ export default function AIAssistantPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [lang, setLang] = useState('en');
+  const [listening, setListening] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recognitionRef = useRef<any>(null);
+
+  function toggleMic() {
+    if (listening) {
+      recognitionRef.current?.stop();
+      setListening(false);
+      return;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      setMessages((prev) => [...prev, { role: 'ai', text: 'Voice input is not supported in this browser. Please use Chrome on Android or Desktop.' }]);
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    const langEntry = LANGUAGES.find((l) => l.code === lang);
+    recognition.lang = langEntry?.bcp47 || 'en-IN';
+    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      let transcript = '';
+      for (let i = 0; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+      setInput(transcript);
+      // If we got a final result, stop listening
+      if (event.results[event.results.length - 1].isFinal) {
+        setListening(false);
+      }
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('[SpeechRecognition] Error:', event.error);
+      setListening(false);
+      if (event.error === 'not-allowed') {
+        setMessages((prev) => [...prev, { role: 'ai', text: 'Microphone access was denied. Please allow microphone permission in your browser settings and try again.' }]);
+      } else if (event.error === 'no-speech') {
+        setMessages((prev) => [...prev, { role: 'ai', text: 'No speech detected. Please tap the mic and speak clearly.' }]);
+      }
+    };
+
+    recognition.onend = () => setListening(false);
+
+    recognitionRef.current = recognition;
+
+    try {
+      recognition.start();
+      setListening(true);
+    } catch (err) {
+      console.error('[SpeechRecognition] Start failed:', err);
+      setListening(false);
+    }
+  }
+
+  function speakText(text: string) {
+    if (!window.speechSynthesis) return;
+    window.speechSynthesis.cancel();
+    // Strip markdown formatting for cleaner speech
+    const clean = text.replace(/\*\*/g, '').replace(/^[-*]\s+/gm, '').replace(/^\d+[.)]\s+/gm, '');
+    const utterance = new SpeechSynthesisUtterance(clean);
+    const langEntry = LANGUAGES.find((l) => l.code === lang);
+    utterance.lang = langEntry?.bcp47 || 'en-IN';
+    utterance.rate = 0.95;
+    window.speechSynthesis.speak(utterance);
+  }
 
   function handleTemplate(t: TemplateAction) {
     router.push(t.route);
@@ -183,7 +271,7 @@ export default function AIAssistantPage() {
       const res = await fetch('/api/driver/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, lang }),
       });
       const data = await res.json();
       setMessages((prev) => [...prev, { role: 'ai', text: data.answer || 'No response received.' }]);
@@ -225,6 +313,33 @@ export default function AIAssistantPage() {
             Ask me anything about your account, or tap a quick action below.
           </p>
         )}
+      </div>
+
+      {/* Language selector pills */}
+      <div style={{
+        display: 'flex', gap: 6, justifyContent: 'center',
+        flexWrap: 'wrap', marginBottom: hasChat ? 16 : 24,
+      }}>
+        {LANGUAGES.map((l) => (
+          <button
+            key={l.code}
+            onClick={() => setLang(l.code)}
+            style={{
+              padding: '6px 14px',
+              borderRadius: 20,
+              border: lang === l.code ? '1.5px solid #F07820' : '1px solid #E5E7EB',
+              background: lang === l.code ? '#FEF3E8' : '#ffffff',
+              color: lang === l.code ? '#F07820' : '#6B7280',
+              fontSize: 13,
+              fontWeight: lang === l.code ? 700 : 500,
+              cursor: 'pointer',
+              fontFamily: F,
+              transition: 'all 0.15s',
+            }}
+          >
+            {l.label}
+          </button>
+        ))}
       </div>
 
       {/* Template question cards — hide once chat starts */}
@@ -302,6 +417,25 @@ export default function AIAssistantPage() {
                 </div>
               )}
               {m.role === 'ai' ? renderMarkdown(m.text) : m.text}
+              {m.role === 'ai' && (
+                <button
+                  onClick={() => speakText(m.text)}
+                  aria-label="Read aloud"
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 4,
+                    marginTop: 8, padding: '4px 10px',
+                    borderRadius: 8, border: '1px solid #E5E7EB',
+                    background: '#F9FAFB', cursor: 'pointer',
+                    fontSize: 11, color: '#6B7280', fontFamily: F,
+                    transition: 'border-color 0.15s, color 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#F07820'; e.currentTarget.style.color = '#F07820'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.color = '#6B7280'; }}
+                >
+                  <Volume2 size={12} strokeWidth={2} />
+                  Listen
+                </button>
+              )}
             </div>
           ))}
 
@@ -315,7 +449,10 @@ export default function AIAssistantPage() {
             }}>
               <Loader2 size={16} color="#F07820" strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} />
               <span style={{ fontSize: 14, color: '#9CA3AF', fontFamily: F }}>Thinking...</span>
-              <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+              <style>{`
+                @keyframes spin { to { transform: rotate(360deg); } }
+                @keyframes pulse-mic { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+              `}</style>
             </div>
           )}
 
@@ -338,7 +475,7 @@ export default function AIAssistantPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Ask anything about your account..."
+          placeholder={listening ? 'Listening... speak now' : 'Ask anything about your account...'}
           disabled={loading}
           style={{
             flex: 1,
@@ -350,6 +487,29 @@ export default function AIAssistantPage() {
             fontFamily: F,
           }}
         />
+        {/* Mic button */}
+        <button
+          onClick={toggleMic}
+          disabled={loading}
+          aria-label={listening ? 'Stop listening' : 'Start voice input'}
+          style={{
+            width: 40, height: 40, borderRadius: '50%',
+            background: listening ? '#FEE2E2' : '#F3F4F6',
+            border: listening ? '1.5px solid #EF4444' : '1px solid #E5E7EB',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            transition: 'all 0.18s',
+            flexShrink: 0,
+            animation: listening ? 'pulse-mic 1.2s ease-in-out infinite' : 'none',
+          }}
+        >
+          {listening
+            ? <MicOff size={18} color="#EF4444" strokeWidth={2} />
+            : <Mic size={18} color="#6B7280" strokeWidth={2} />
+          }
+        </button>
+
+        {/* Send button */}
         <button
           onClick={handleSend}
           disabled={loading || !input.trim()}

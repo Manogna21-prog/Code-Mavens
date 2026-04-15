@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { message } = await request.json();
+    const { message, lang } = await request.json();
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return NextResponse.json({ error: 'Message is required' }, { status: 400 });
     }
@@ -98,7 +98,8 @@ Rules:
 - Use ₹ symbol for Indian Rupees. Format numbers with commas (Indian style: 1,00,000).
 - Be warm and supportive — these drivers depend on this insurance for their livelihood.
 - Do not make up data or claim balances that aren't in the context above.
-- If they ask how to do something in the app, give brief practical guidance.`;
+- If they ask how to do something in the app, give brief practical guidance.
+- LANGUAGE RULE: Default to English. ONLY respond in another language if the user's message is clearly written in that language (Hindi, Telugu, Tamil, Malayalam, etc.). If the message is in English, you MUST respond in English.`;
 
     const answer = await chatCompletion(
       [
