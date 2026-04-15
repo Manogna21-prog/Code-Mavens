@@ -1,4 +1,4 @@
-import DashboardShell from '@/components/driver/DashboardShell';
+import BottomNav from '@/components/driver/BottomNav';
 
 export default function DashboardLayout({
   children,
@@ -10,7 +10,7 @@ export default function DashboardLayout({
       <main className="pb-20 max-w-lg mx-auto">
         {children}
       </main>
-      <DashboardShell />
+      <BottomNav />
     </div>
   );
 }

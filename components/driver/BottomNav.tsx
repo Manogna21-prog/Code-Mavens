@@ -14,12 +14,13 @@ const RIGHT_ITEMS = [
   { href: '/dashboard/profile', label: 'Profile', icon: User },
 ];
 
-export default function BottomNav({ onAIClick }: { onAIClick?: () => void }) {
+export default function BottomNav() {
   const pathname = usePathname();
 
   const isActive = (href: string) =>
     pathname === href || (href !== '/dashboard' && pathname.startsWith(href));
 
+  const aiActive = pathname === '/dashboard/ai';
   const F = "var(--font-inter),'Inter',sans-serif";
 
   return (
@@ -50,30 +51,27 @@ export default function BottomNav({ onAIClick }: { onAIClick?: () => void }) {
           );
         })}
 
-        {/* Center AI button — raised */}
-        <button
-          onClick={onAIClick}
+        {/* Center AI button — raised, navigates to /dashboard/ai */}
+        <Link
+          href="/dashboard/ai"
           aria-label="AI Assistant"
           style={{
             width: 52, height: 52, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #F07820, #d96010)',
+            background: aiActive
+              ? 'linear-gradient(135deg, #d96010, #b84d0a)'
+              : 'linear-gradient(135deg, #F07820, #d96010)',
             border: '3px solid #ffffff',
-            boxShadow: '0 -2px 16px rgba(240,120,32,0.35)',
+            boxShadow: aiActive
+              ? '0 -2px 20px rgba(240,120,32,0.5)'
+              : '0 -2px 16px rgba(240,120,32,0.35)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', marginTop: -18, flexShrink: 0,
+            marginTop: -18, flexShrink: 0,
             transition: 'transform 0.2s, box-shadow 0.2s',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'scale(1.08)';
-            e.currentTarget.style.boxShadow = '0 -2px 24px rgba(240,120,32,0.5)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'scale(1)';
-            e.currentTarget.style.boxShadow = '0 -2px 16px rgba(240,120,32,0.35)';
+            textDecoration: 'none',
           }}
         >
           <Sparkles size={24} color="#fff" strokeWidth={2} />
-        </button>
+        </Link>
 
         {/* Right items */}
         {RIGHT_ITEMS.map((item) => {
