@@ -7,7 +7,7 @@ import {
   TrendingUp, Award, Shield,
   Flame, BellRing, ClipboardCheck, CreditCard, Users, Headphones,
   Check, Phone, Users2,
-  AlertTriangle, HeartPulse, Sun, Cloud, CloudDrizzle, MessageCircle,
+  AlertTriangle, HeartPulse, Sun, Cloud, CloudDrizzle,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -435,7 +435,7 @@ export default function DashboardHomePage() {
             3. ACTIVE POLICY CARD
         ══════════════════════════════════════════ */}
         {data.policy ? (
-          <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s' }}>
+          <div id="card-policy" className="dsh-s dsh-card" style={{ animationDelay: '0.1s' }}>
             {/* Header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#4B5563', textTransform: 'uppercase', letterSpacing: '0.5px', fontFamily: F }}>
@@ -537,7 +537,7 @@ export default function DashboardHomePage() {
           style={{ animationDelay: '0.2s', display: 'flex', gap: 14, alignItems: 'stretch' }}
         >
           {/* GigPoints card */}
-          <div className="dsh-card" style={{ flex: 1 }}>
+          <div id="card-gigpoints" className="dsh-card" style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <Award size={18} color="#9CA3AF" strokeWidth={1.5} />
               <span style={{ fontSize: 14, color: '#4B5563', fontFamily: F }}>GigPoints</span>
@@ -552,7 +552,7 @@ export default function DashboardHomePage() {
           </div>
 
           {/* Net Savings card */}
-          <div style={{
+          <div id="card-savings" style={{
             flex: 1,
             background: 'linear-gradient(135deg, #F07820, #c95e10)',
             borderRadius: 16, padding: 20,
@@ -937,31 +937,6 @@ export default function DashboardHomePage() {
 
       </div>
 
-    {/* ══════════════════════════════════════════
-        15. FLOATING AI CHAT BUTTON (fixed)
-    ══════════════════════════════════════════ */}
-    <button
-      aria-label="AI Chat"
-      style={{
-        position: 'fixed', bottom: 90, right: 20, zIndex: 50,
-        width: 56, height: 56, borderRadius: '50%',
-        background: 'linear-gradient(135deg, #F07820, #1A40C0)',
-        border: 'none', cursor: 'pointer',
-        boxShadow: '0 4px 16px rgba(0,0,0,0.22)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}
-    >
-      <MessageCircle size={24} color="#fff" strokeWidth={2} />
-      {/* AI badge */}
-      <span style={{
-        position: 'absolute', top: -2, right: -2,
-        background: '#EF4444', color: '#fff',
-        fontSize: 10, fontWeight: 700,
-        borderRadius: 9, padding: '2px 5px',
-        fontFamily: F, lineHeight: 1.4,
-        border: '1.5px solid #F6F7F9',
-      }}>AI</span>
-    </button>
   </div>
   );
 }

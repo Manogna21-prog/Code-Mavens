@@ -1,4 +1,5 @@
 import BottomNav from '@/components/driver/BottomNav';
+import AIChatPanel from '@/components/driver/AIChatPanel';
 
 export default function DashboardLayout({
   children,
@@ -11,6 +12,7 @@ export default function DashboardLayout({
         {children}
       </main>
       <BottomNav />
+      <AIChatPanel />
     </div>
   );
 }

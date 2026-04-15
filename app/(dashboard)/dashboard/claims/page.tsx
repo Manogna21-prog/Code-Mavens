@@ -362,7 +362,7 @@ export default function ClaimsPage() {
 
   // ---------- Main render ----------
   return (
-    <div style={{ padding: '20px 16px', maxWidth: 520, margin: '0 auto' }}>
+    <div id="card-claims-list" style={{ padding: '20px 16px', maxWidth: 520, margin: '0 auto' }}>
       {/* ---------------------------------------------------------------- */}
       {/* Section 1: Claims Summary Header                                 */}
       {/* ---------------------------------------------------------------- */}
