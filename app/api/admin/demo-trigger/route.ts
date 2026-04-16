@@ -6,7 +6,6 @@ import { getCityBySlug } from '@/lib/config/cities';
 import { TRIGGERS } from '@/lib/config/constants';
 import { setMockPlatformStatus } from '@/lib/clients/statusgator';
 import { processClaimsForEvent } from '@/lib/adjudicator/claims';
-import { simulatePayout } from '@/lib/payments/simulate-payout';
 import type { DisruptionType } from '@/lib/config/constants';
 import type { TriggerCandidate } from '@/lib/adjudicator/types';
 
@@ -84,25 +83,38 @@ export async function POST(request: Request) {
       verified_by_llm: false,
     };
 
+    // processClaimsForEvent now runs the FULL zero-touch pipeline:
+    // Gate 1 → Gate 2 → Fraud Detection → Auto-approve+pay OR Auto-reject
     const claimResult = await processClaimsForEvent(evt.id, candidate);
+    const payoutsCompleted = claimResult.payouts_initiated;
 
-    // Auto-payout all claims created by demo trigger
-    let payoutsCompleted = 0;
-    if (claimResult.claims_created > 0) {
-      const { data: newClaims } = await admin
-        .from('parametric_claims')
-        .select('id, profile_id, payout_amount_inr')
-        .eq('disruption_event_id', evt.id)
-        .eq('status', 'gate1_passed');
+    // Write to system_logs
+    await admin.from('system_logs').insert({
+      event_type: 'demo_trigger_fired',
+      severity: 'info',
+      metadata: {
+        city,
+        disruption_type: event_type,
+        severity_score: severity,
+        trigger_value: actualTriggerValue,
+        event_id: evt.id,
+        claims_created: claimResult.claims_created,
+        payouts_completed: payoutsCompleted,
+        injected_by: userId || 'admin',
+      },
+    } as never);
 
-      type ClaimRow = { id: string; profile_id: string; payout_amount_inr: number };
-      const claims = (newClaims as unknown as ClaimRow[]) || [];
-
-      for (const claim of claims) {
-        const result = await simulatePayout(claim.id, claim.profile_id, claim.payout_amount_inr);
-        if (result.success) payoutsCompleted++;
-      }
-    }
+    // Write to parametric_trigger_ledger
+    await admin.from('parametric_trigger_ledger').insert({
+      event_type,
+      city,
+      trigger_value: actualTriggerValue,
+      outcome: claimResult.claims_created > 0 ? 'triggered' : 'no_pay',
+      claims_created: claimResult.claims_created,
+      payouts_initiated: payoutsCompleted,
+      latency_ms: Date.now() - Date.now(), // approximate
+      error_message: null,
+    } as never);
 
     return NextResponse.json({
       status: 'ok',
@@ -113,6 +125,17 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error('[Admin] Demo trigger error:', error);
+
+    // Log the error too
+    try {
+      const admin = createAdminClient();
+      await admin.from('system_logs').insert({
+        event_type: 'demo_trigger_error',
+        severity: 'error',
+        metadata: { error: error instanceof Error ? error.message : 'Unknown error' },
+      } as never);
+    } catch { /* best effort */ }
+
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Failed' },
       { status: 500 }

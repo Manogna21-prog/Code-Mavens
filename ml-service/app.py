@@ -11,8 +11,12 @@ Endpoints:
 
 import os
 import json
+import warnings
 import numpy as np
 import pandas as pd
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 import requests
 import joblib
 from datetime import datetime, timedelta
@@ -83,38 +87,52 @@ def fetch_recent_weather(lat: float, lng: float, as_of_date: str, days: int = 35
     """
     Fetch daily weather data ending on as_of_date.
     as_of_date: YYYY-MM-DD string — the "today" for the prediction.
+    Falls back to progressively earlier dates if archive API doesn't have recent data.
     """
     end = datetime.strptime(as_of_date, "%Y-%m-%d")
-    start = end - timedelta(days=days)
 
-    url = "https://archive-api.open-meteo.com/v1/archive"
-    params = {
-        "latitude": lat, "longitude": lng,
-        "start_date": start.strftime("%Y-%m-%d"),
-        "end_date": end.strftime("%Y-%m-%d"),
-        "daily": "precipitation_sum,rain_sum,wind_speed_10m_max,wind_gusts_10m_max,"
-                 "temperature_2m_max,temperature_2m_min,temperature_2m_mean,"
-                 "relative_humidity_2m_mean,surface_pressure_mean,cloud_cover_mean",
-        "timezone": "Asia/Kolkata",
-    }
+    # Try with the given date, then fall back up to 7 days earlier
+    for offset in range(0, 8, 2):
+        actual_end = end - timedelta(days=offset)
+        start = actual_end - timedelta(days=days)
 
-    resp = requests.get(url, params=params, timeout=15)
-    resp.raise_for_status()
-    data = resp.json()
+        url = "https://archive-api.open-meteo.com/v1/archive"
+        params = {
+            "latitude": lat, "longitude": lng,
+            "start_date": start.strftime("%Y-%m-%d"),
+            "end_date": actual_end.strftime("%Y-%m-%d"),
+            "daily": "precipitation_sum,rain_sum,wind_speed_10m_max,wind_gusts_10m_max,"
+                     "temperature_2m_max,temperature_2m_min,temperature_2m_mean,"
+                     "relative_humidity_2m_mean,surface_pressure_mean,cloud_cover_mean",
+            "timezone": "Asia/Kolkata",
+        }
 
-    return pd.DataFrame({
-        "date": pd.to_datetime(data["daily"]["time"]),
-        "precipitation_mm": data["daily"]["precipitation_sum"],
-        "rain_mm": data["daily"]["rain_sum"],
-        "wind_speed_max_kmh": data["daily"]["wind_speed_10m_max"],
-        "wind_gusts_max_kmh": data["daily"]["wind_gusts_10m_max"],
-        "temp_max_c": data["daily"]["temperature_2m_max"],
-        "temp_min_c": data["daily"]["temperature_2m_min"],
-        "temp_mean_c": data["daily"]["temperature_2m_mean"],
-        "humidity_mean": data["daily"]["relative_humidity_2m_mean"],
-        "pressure_mean_hpa": data["daily"]["surface_pressure_mean"],
-        "cloud_cover_mean": data["daily"]["cloud_cover_mean"],
-    })
+        try:
+            resp = requests.get(url, params=params, timeout=15, verify=False)
+            resp.raise_for_status()
+            data = resp.json()
+
+            if "daily" not in data or not data["daily"].get("time"):
+                continue  # empty response, try earlier date
+
+            return pd.DataFrame({
+                "date": pd.to_datetime(data["daily"]["time"]),
+                "precipitation_mm": data["daily"]["precipitation_sum"],
+                "rain_mm": data["daily"]["rain_sum"],
+                "wind_speed_max_kmh": data["daily"]["wind_speed_10m_max"],
+                "wind_gusts_max_kmh": data["daily"]["wind_gusts_10m_max"],
+                "temp_max_c": data["daily"]["temperature_2m_max"],
+                "temp_min_c": data["daily"]["temperature_2m_min"],
+                "temp_mean_c": data["daily"]["temperature_2m_mean"],
+                "humidity_mean": data["daily"]["relative_humidity_2m_mean"],
+                "pressure_mean_hpa": data["daily"]["surface_pressure_mean"],
+                "cloud_cover_mean": data["daily"]["cloud_cover_mean"],
+            })
+        except Exception as e:
+            print(f"[Weather] Attempt with end_date={actual_end.strftime('%Y-%m-%d')} failed: {e}")
+            continue
+
+    raise Exception(f"Could not fetch weather data for any date near {as_of_date}")
 
 
 def fetch_aqi_forecast(lat: float, lng: float) -> dict:
@@ -125,7 +143,7 @@ def fetch_aqi_forecast(lat: float, lng: float) -> dict:
 
     try:
         url = f"https://api.waqi.info/feed/geo:{lat};{lng}/?token={token}"
-        resp = requests.get(url, timeout=10)
+        resp = requests.get(url, timeout=10, verify=False)
         data = resp.json()
 
         if data.get("status") != "ok":
@@ -233,16 +251,20 @@ def build_features_for_prediction(weather_df: pd.DataFrame, city_slug: str, targ
 
 
 def resolve_date(date_param: Optional[str]) -> str:
-    """Resolve the prediction date — use provided date or default to yesterday"""
+    """Resolve the prediction date — use provided date or default to 3 days ago
+    (archive API lags 2-5 days behind real-time)"""
     if date_param:
-        # Validate format
         try:
-            datetime.strptime(date_param, "%Y-%m-%d")
+            d = datetime.strptime(date_param, "%Y-%m-%d")
+            # Clamp to 3 days ago max — archive API doesn't have recent data
+            max_date = datetime.now() - timedelta(days=3)
+            if d > max_date:
+                return max_date.strftime("%Y-%m-%d")
             return date_param
         except ValueError:
             raise HTTPException(400, f"Invalid date format: {date_param}. Use YYYY-MM-DD")
-    # Default: yesterday (latest available data)
-    return (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    # Default: 3 days ago (safe for archive API)
+    return (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")
 
 
 # ======================== API Models ========================
@@ -451,6 +473,16 @@ def predict_premium(req: PremiumRequest):
     # WeatherRisk addon: capped [10, 20]
     weather_risk_addon = 10 + (combined_risk * 10)
     weather_risk_addon = max(10, min(20, weather_risk_addon))
+
+    # Seasonal risk multiplier (Indian weather patterns)
+    SEASONAL_MULTIPLIER = {
+        1: 0.85, 2: 0.85, 3: 1.0, 4: 1.15, 5: 1.25,
+        6: 1.4, 7: 1.4, 8: 1.4, 9: 1.3, 10: 1.2, 11: 1.15, 12: 0.9,
+    }
+    current_month = datetime.strptime(prediction_date, "%Y-%m-%d").month
+    seasonal_mult = SEASONAL_MULTIPLIER.get(current_month, 1.0)
+    weather_risk_addon = round(weather_risk_addon * seasonal_mult, 2)
+    weather_risk_addon = max(10, min(30, weather_risk_addon))  # expanded cap for monsoon
 
     # UBI addon: based on driver's zone exposure (from mock Porter API)
     driver_zones = get_driver_zones(req.city, req.driver_id)

@@ -142,7 +142,30 @@
   .sans  { font-family: var(--font-inter), 'Inter', sans-serif; }
 
   /* Admin table row hover */
-  .admin-row:hover { background: var(--teal-bg); }
+  .admin-row:hover { background: rgba(240,120,32,0.06); }
+
+  /* Admin card — matches driver dashboard .dsh-card */
+  .adm-card {
+    background: #ffffff;
+    border: 1px solid #E8E8EA;
+    border-radius: 16px;
+    padding: 20px;
+  }
+
+  /* Admin staggered entry animation */
+  .adm-s {
+    animation: adm-up 0.4s ease both;
+  }
+  .adm-s:nth-child(1)  { animation-delay: 0s; }
+  .adm-s:nth-child(2)  { animation-delay: 0.05s; }
+  .adm-s:nth-child(3)  { animation-delay: 0.1s; }
+  .adm-s:nth-child(4)  { animation-delay: 0.15s; }
+  .adm-s:nth-child(5)  { animation-delay: 0.2s; }
+  .adm-s:nth-child(6)  { animation-delay: 0.25s; }
+  .adm-s:nth-child(7)  { animation-delay: 0.3s; }
+  .adm-s:nth-child(8)  { animation-delay: 0.35s; }
+  .adm-s:nth-child(9)  { animation-delay: 0.4s; }
+  .adm-s:nth-child(10) { animation-delay: 0.45s; }
 
   /* Alert dot blink */
   .blink {
@@ -153,6 +176,21 @@
 @keyframes blink-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
+}
+
+@keyframes adm-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes adm-bar-grow {
+  from { transform: scaleY(0); }
+  to   { transform: scaleY(1); }
+}
+
+@keyframes adm-bar-grow-x {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
 }
 
 /* AI Chat — highlight pulse on target cards */

@@ -1,6 +1,7 @@
 // ============================================================================
 // NewsData.io API Client — Curfew/Bandh/Strike Detection
 // Free tier: 200 credits/day
+// Searches Indian news for mobility restrictions affecting LCV operations
 // ============================================================================
 
 import { fetchWithRetry } from '@/lib/utils/retry';
@@ -18,7 +19,7 @@ interface NewsDataResponse {
     source_name: string;
     category: string[];
     country: string[];
-  }>;
+  }> | null;
 }
 
 export interface NewsArticle {
@@ -30,20 +31,38 @@ export interface NewsArticle {
 }
 
 /**
- * Search for curfew/bandh/strike news in India
+ * Search for curfew/bandh/strike news in India, optionally filtered by city
  */
-export async function searchDisruptionNews(): Promise<NewsArticle[]> {
+export async function searchDisruptionNews(city?: string): Promise<NewsArticle[]> {
   const apiKey = process.env.NEWSDATA_API_KEY;
-  if (!apiKey) return [];
+  if (!apiKey) {
+    console.warn('[NewsData] NEWSDATA_API_KEY not set — skipping news check');
+    return [];
+  }
 
   try {
-    const query = encodeURIComponent('curfew OR bandh OR strike OR lockdown OR "mobility restriction"');
+    // Build query: city-specific if provided, broader otherwise
+    const keywords = 'curfew OR bandh OR strike OR lockdown OR "mobility restriction" OR "vehicle ban" OR "section 144"';
+    const fullQuery = city
+      ? `(${keywords}) AND ${city}`
+      : keywords;
+
+    const query = encodeURIComponent(fullQuery);
     const url = `https://newsdata.io/api/1/latest?apikey=${apiKey}&q=${query}&country=in&language=en,hi&size=10`;
+
+    console.log(`[NewsData] Searching: ${city ? `city=${city}` : 'all India'}`);
+
     const data = await fetchWithRetry<NewsDataResponse>(url, {
       cacheTtlMs: CACHE_TTL.NEWS,
+      timeoutMs: 10000,
     });
 
-    if (data.status !== 'success' || !data.results) return [];
+    if (data.status !== 'success' || !data.results) {
+      console.log(`[NewsData] No results for query`);
+      return [];
+    }
+
+    console.log(`[NewsData] Found ${data.results.length} articles`);
 
     return data.results.map((article) => ({
       id: article.article_id,
@@ -56,4 +75,11 @@ export async function searchDisruptionNews(): Promise<NewsArticle[]> {
     console.error('[NewsData] Error fetching news:', error);
     return [];
   }
+}
+
+/**
+ * Search for disruption news for a specific city — used by adjudicator
+ */
+export async function searchCityDisruptionNews(city: string): Promise<NewsArticle[]> {
+  return searchDisruptionNews(city);
 }

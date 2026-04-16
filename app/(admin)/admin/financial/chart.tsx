@@ -26,8 +26,8 @@ export function FinancialChart({ data }: { data: ChartData[] }) {
           labelFormatter={(label) => `Week of ${String(label)}`}
         />
         <Legend />
-        <Bar dataKey="premium" fill="#0d9488" name="Premium" />
-        <Bar dataKey="payouts" fill="#c0392b" name="Payouts" />
+        <Bar dataKey="premium" fill="#8B5CF6" name="Premium" />
+        <Bar dataKey="payouts" fill="#3B82F6" name="Payouts" />
       </BarChart>
     </ResponsiveContainer>
   );

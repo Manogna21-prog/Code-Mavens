@@ -8,7 +8,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isWithinCircle } from '@/lib/utils/geo';
 import { CLAIM_RULES, FRAUD } from '@/lib/config/constants';
-import { runAllFraudChecks } from '@/lib/fraud/detector';
+import { runAllFraudChecks, updateTrustScore } from '@/lib/fraud/detector';
 import { simulatePayout } from '@/lib/payments/simulate-payout';
 import type { ParametricClaim, LiveDisruptionEvent, Profile, WeeklyPolicy } from '@/lib/types/database';
 
@@ -114,8 +114,8 @@ export async function verifyGate2(claimId: string): Promise<Gate2Result> {
         isWithinCircle(l.latitude, l.longitude, profile.zone_latitude!, profile.zone_longitude!, 15)
     );
   } else {
-    // No geofence data — pass GPS check
-    gpsWithinZone = true;
+    // No geofence data — FAIL GPS check (require zone verification)
+    gpsWithinZone = false;
   }
 
   const passed = activityMinutes >= CLAIM_RULES.MIN_ACTIVITY_MINUTES && gpsWithinZone;
@@ -310,30 +310,35 @@ export async function processClaimVerification(
   let payoutTriggered = false;
 
   if (fraudResult.fraudScore >= FRAUD.MANUAL_REVIEW_THRESHOLD) {
-    // High fraud score — send to manual review
+    // High fraud score — auto-REJECT (zero-touch = no manual queue)
     await supabase
       .from('parametric_claims')
       .update({
-        status: 'pending_review',
-        admin_review_status: 'pending',
-        flag_reason: 'High fraud score — manual review required',
+        status: 'rejected',
+        is_flagged: true,
+        flag_reason: fraudResult.reasons.length > 0
+          ? fraudResult.reasons.join('; ')
+          : 'Auto-rejected: fraud score exceeded threshold',
       } as never)
       .eq('id', claimId);
 
+    // Decay trust score for fraud-rejected claims
+    await updateTrustScore(claim.profile_id, false);
+
     return {
-      success: true,
+      success: false,
       claimId,
-      status: 'pending_review',
+      status: 'rejected',
       gate2,
       fraudScore: fraudResult.fraudScore,
       fraudSignals: fraudResult.signals,
       payoutTriggered: false,
-      reason: 'Sent to manual review due to high fraud score',
+      reason: 'Auto-rejected: fraud score too high',
     };
   }
 
   if (fraudResult.fraudScore < FRAUD.AUTO_APPROVE_THRESHOLD) {
-    // Low fraud score — auto-approve and pay
+    // Low fraud score — auto-approve and pay, boost trust score
     await supabase
       .from('parametric_claims')
       .update({ status: 'approved' } as never)
@@ -341,6 +346,9 @@ export async function processClaimVerification(
 
     const payoutResult = await simulatePayout(claimId, claim.profile_id, claim.payout_amount_inr);
     payoutTriggered = payoutResult.success;
+
+    // Reward clean claim with trust score boost
+    await updateTrustScore(claim.profile_id, true);
 
     return {
       success: true,
@@ -359,7 +367,9 @@ export async function processClaimVerification(
     .update({
       status: 'approved',
       is_flagged: true,
-      flag_reason: 'Medium fraud score — approved with flag',
+      flag_reason: fraudResult.reasons.length > 0
+        ? fraudResult.reasons.join('; ')
+        : 'Medium fraud score — approved with flag',
     } as never)
     .eq('id', claimId);
 

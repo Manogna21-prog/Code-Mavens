@@ -92,40 +92,69 @@ export default async function AdminFinancialPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="serif text-2xl font-bold">Financial Overview</h1>
+      <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A1A', letterSpacing: '-0.03em', fontFamily: "var(--font-inter),'Inter',sans-serif" }}>Financial Overview</h1>
 
+      {/* KPI Cards with Gradient Backgrounds */}
       <div className="grid grid-cols-3 gap-4">
-        <div className="rounded-xl p-4" style={{ border: '1px solid var(--rule)' }}>
-          <div className="mono text-xs uppercase tracking-wide" style={{ color: 'var(--ink-60)' }}>Total Premium Revenue</div>
-          <div className="serif text-2xl font-bold mt-1" style={{ color: 'var(--teal)' }}>₹{totalPremium.toLocaleString()}</div>
+        {/* Premium Revenue - Purple Gradient */}
+        <div style={{
+          background: 'linear-gradient(135deg, #8B5CF6, #7C3AED)',
+          borderRadius: 16,
+          padding: 16,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: -10, right: -10, width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+          <div className="mono text-xs uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>Total Premium Revenue</div>
+          <div className="serif text-2xl font-bold mt-1" style={{ color: '#fff', position: 'relative', zIndex: 1 }}>{'\u20B9'}{totalPremium.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl p-4" style={{ border: '1px solid var(--rule)' }}>
-          <div className="mono text-xs uppercase tracking-wide" style={{ color: 'var(--ink-60)' }}>Total Payouts</div>
-          <div className="serif text-2xl font-bold mt-1" style={{ color: 'var(--red-acc)' }}>₹{totalPayouts.toLocaleString()}</div>
+        {/* Total Payouts - Blue Gradient */}
+        <div style={{
+          background: 'linear-gradient(135deg, #3B82F6, #2563EB)',
+          borderRadius: 16,
+          padding: 16,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: -10, right: -10, width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+          <div className="mono text-xs uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>Total Payouts</div>
+          <div className="serif text-2xl font-bold mt-1" style={{ color: '#fff', position: 'relative', zIndex: 1 }}>{'\u20B9'}{totalPayouts.toLocaleString()}</div>
         </div>
-        <div className="rounded-xl p-4" style={{ border: '1px solid var(--rule)' }}>
-          <div className="mono text-xs uppercase tracking-wide" style={{ color: 'var(--ink-60)' }}>Loss Ratio</div>
-          <div className="serif text-2xl font-bold mt-1" style={{ color: Number(lossRatio) > 80 ? 'var(--red-acc)' : 'var(--teal)' }}>
+        {/* Loss Ratio - Green or Red Gradient */}
+        <div style={{
+          background: Number(lossRatio) > 80
+            ? 'linear-gradient(135deg, #dc2626, #B91C1C)'
+            : 'linear-gradient(135deg, #22C55E, #16A34A)',
+          borderRadius: 16,
+          padding: 16,
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{ position: 'absolute', top: -10, right: -10, width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
+          <div className="mono text-xs uppercase tracking-wide" style={{ color: 'rgba(255,255,255,0.8)' }}>Loss Ratio</div>
+          <div className="serif text-2xl font-bold mt-1" style={{ color: '#fff', position: 'relative', zIndex: 1 }}>
             {lossRatio}%
           </div>
         </div>
       </div>
 
+      {/* Chart Section */}
       {chartData.length > 0 && (
-        <div className="rounded-xl p-4" style={{ border: '1px solid var(--rule)' }}>
-          <h2 className="font-medium mb-4" style={{ color: 'var(--ink)' }}>Premium vs Payouts by Week</h2>
+        <div className="p-4" style={{ background: '#fff', border: '1px solid rgba(99,102,241,0.12)', borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+          <h2 className="font-medium mb-4" style={{ color: '#1A1A1A' }}>Premium vs Payouts by Week</h2>
           <FinancialChart data={chartData} />
         </div>
       )}
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--rule)' }}>
-        <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--rule)', background: 'var(--cream-d)' }}>
-          <h2 className="font-medium" style={{ color: 'var(--ink)' }}>Per-City Breakdown</h2>
+      {/* Per-City Breakdown Table */}
+      <div className="overflow-hidden" style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08), rgba(139,92,246,0.08))', borderBottom: '1px solid rgba(99,102,241,0.1)' }}>
+          <h2 className="font-medium" style={{ color: '#1A1A1A' }}>Per-City Breakdown</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" style={{ background: '#fff' }}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left" style={{ color: 'var(--ink-60)', borderBottom: '1px solid var(--ink-10)' }}>
+              <tr className="text-left" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.06))', color: '#6366F1', borderBottom: '1px solid rgba(99,102,241,0.1)' }}>
                 <th className="px-4 py-3 font-medium">City</th>
                 <th className="px-4 py-3 font-medium">Premiums</th>
                 <th className="px-4 py-3 font-medium">Payouts</th>
@@ -134,17 +163,17 @@ export default async function AdminFinancialPage() {
               </tr>
             </thead>
             <tbody>
-              {cityBreakdown.map((row) => {
+              {cityBreakdown.map((row, i) => {
                 const cityLoss = row.premium_total > 0
                   ? (row.payout_total / row.premium_total * 100).toFixed(1)
                   : '0.0';
                 return (
-                  <tr key={row.city} className="admin-row" style={{ borderTop: '1px solid var(--ink-10)' }}>
-                    <td className="px-4 py-3 font-medium" style={{ color: 'var(--ink)' }}>{row.city}</td>
-                    <td className="serif px-4 py-3" style={{ color: 'var(--teal)' }}>₹{row.premium_total.toLocaleString()}</td>
-                    <td className="serif px-4 py-3" style={{ color: 'var(--red-acc)' }}>₹{row.payout_total.toLocaleString()}</td>
-                    <td className="serif px-4 py-3" style={{ color: 'var(--ink-60)' }}>{row.claim_count}</td>
-                    <td className="serif px-4 py-3 font-medium" style={{ color: Number(cityLoss) > 80 ? 'var(--red-acc)' : 'var(--teal)' }}>
+                  <tr key={row.city} className="admin-row" style={{ borderTop: '1px solid #F3F4F6', background: i % 2 === 0 ? '#fff' : 'rgba(99,102,241,0.02)' }}>
+                    <td className="px-4 py-3 font-medium" style={{ color: '#1A1A1A' }}>{row.city}</td>
+                    <td className="serif px-4 py-3" style={{ color: '#8B5CF6' }}>{'\u20B9'}{row.premium_total.toLocaleString()}</td>
+                    <td className="serif px-4 py-3" style={{ color: '#3B82F6' }}>{'\u20B9'}{row.payout_total.toLocaleString()}</td>
+                    <td className="serif px-4 py-3" style={{ color: '#6B7280' }}>{row.claim_count}</td>
+                    <td className="serif px-4 py-3 font-medium" style={{ color: Number(cityLoss) > 80 ? '#dc2626' : '#22C55E' }}>
                       {cityLoss}%
                     </td>
                   </tr>
@@ -152,7 +181,7 @@ export default async function AdminFinancialPage() {
               })}
               {cityBreakdown.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center" style={{ color: 'var(--ink-30)' }}>
+                  <td colSpan={5} className="px-4 py-8 text-center" style={{ color: '#9CA3AF' }}>
                     No financial data yet
                   </td>
                 </tr>
