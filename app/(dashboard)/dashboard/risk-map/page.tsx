@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { createBrowserClient } from '@supabase/ssr';
 import { TRIGGERS } from '@/lib/config/constants';
 import type { DisruptionType } from '@/lib/config/constants';
+import { getTranslator } from '@/lib/i18n/translations';
 
 interface DisruptionEvent {
   id: string;
@@ -29,6 +30,7 @@ function getSeverityLevel(score: number): string {
 export default function RiskMapPage() {
   const [events, setEvents] = useState<DisruptionEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userLang, setUserLang] = useState('en');
 
   useEffect(() => {
     const supabase = createBrowserClient(
@@ -36,7 +38,13 @@ export default function RiskMapPage() {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     );
 
-    async function fetchEvents() {
+    async function load() {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const { data: p } = await supabase.from('profiles').select('language').eq('id', user.id).single();
+        if (p && (p as { language: string }).language) setUserLang((p as { language: string }).language);
+      }
+
       const { data } = await supabase
         .from('live_disruption_events')
         .select('id, event_type, city, severity_score, trigger_value, created_at')
@@ -47,21 +55,23 @@ export default function RiskMapPage() {
       setLoading(false);
     }
 
-    fetchEvents();
+    load();
   }, []);
+
+  const t = getTranslator(userLang);
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="serif text-xl font-bold" style={{ color: 'var(--ink)' }}>Active Disruptions</h1>
-      <p className="text-sm" style={{ color: 'var(--ink-60)' }}>Live events affecting delivery operations</p>
+      <h1 className="serif text-xl font-bold" style={{ color: 'var(--ink)' }}>{t('riskmap.title')}</h1>
+      <p className="text-sm" style={{ color: 'var(--ink-60)' }}>{t('riskmap.subtitle')}</p>
 
       {loading ? (
-        <div className="text-center py-12" style={{ color: 'var(--ink-30)' }}>Loading...</div>
+        <div className="text-center py-12" style={{ color: 'var(--ink-30)' }}>{t('riskmap.loading')}</div>
       ) : events.length === 0 ? (
         <div className="text-center py-12">
           <div className="text-4xl mb-2">&#9745;</div>
-          <p style={{ color: 'var(--ink-60)' }}>No active disruptions</p>
-          <p className="text-sm mt-1" style={{ color: 'var(--ink-30)' }}>All clear for deliveries</p>
+          <p style={{ color: 'var(--ink-60)' }}>{t('riskmap.noDisruptions')}</p>
+          <p className="text-sm mt-1" style={{ color: 'var(--ink-30)' }}>{t('riskmap.allClear')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -89,9 +99,9 @@ export default function RiskMapPage() {
                   </span>
                 </div>
                 <div className="mt-2 flex items-center gap-4 text-sm" style={{ color: 'var(--ink-60)' }}>
-                  <span>Severity: {event.severity_score.toFixed(1)}</span>
+                  <span>{t('riskmap.severity')}: {event.severity_score.toFixed(1)}</span>
                   {event.trigger_value != null && (
-                    <span>Value: {event.trigger_value} {trigger?.unit || ''}</span>
+                    <span>{t('riskmap.value')}: {event.trigger_value} {trigger?.unit || ''}</span>
                   )}
                 </div>
                 <div className="mono mt-1 text-xs" style={{ color: 'var(--ink-30)' }}>{time}</div>

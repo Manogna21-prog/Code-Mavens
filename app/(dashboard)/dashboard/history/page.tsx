@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { TRIGGERS } from '@/lib/config/constants';
 import type { DisruptionType } from '@/lib/config/constants';
+import { getTranslator } from '@/lib/i18n/translations';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -249,10 +250,12 @@ function PaymentLedger({
   entries,
   formatDate: fmtDate,
   formatINR: fmtINR,
+  t,
 }: {
   entries: LedgerEntry[];
   formatDate: (d: string) => string;
   formatINR: (n: number) => string;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const [ledgerFilter, setLedgerFilter] = useState<'all' | 'premium' | 'payout'>('all');
   const [expanded, setExpanded] = useState(false);
@@ -269,13 +272,13 @@ function PaymentLedger({
       {/* Header + sub-tabs */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-          Payment Ledger
+          {t('history.paymentLedger')}
         </p>
         <div style={{ display: 'flex', gap: 4, background: 'var(--ink-10)', borderRadius: 8, padding: 2 }}>
           {([
-            { key: 'all' as const, label: `All (${entries.length})` },
-            { key: 'payout' as const, label: `Payouts (${payoutCount})` },
-            { key: 'premium' as const, label: `Premiums (${premiumCount})` },
+            { key: 'all' as const, label: `${t('history.all')} (${entries.length})` },
+            { key: 'payout' as const, label: `${t('history.payouts')} (${payoutCount})` },
+            { key: 'premium' as const, label: `${t('history.premiums')} (${premiumCount})` },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -302,7 +305,7 @@ function PaymentLedger({
 
       {filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
-          <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)' }}>No transactions</p>
+          <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)' }}>{t('history.noTransactions')}</p>
         </div>
       ) : (
         <>
@@ -331,7 +334,7 @@ function PaymentLedger({
                         color: amtColor, textTransform: 'uppercase', letterSpacing: '0.06em',
                       }}
                     >
-                      {isPremium ? 'PREMIUM' : 'PAYOUT'}
+                      {isPremium ? t('history.tagPremium') : t('history.tagPayout')}
                     </span>
                     <span className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
                       {entry.ref}
@@ -369,7 +372,7 @@ function PaymentLedger({
                 letterSpacing: '0.04em', transition: 'color 0.15s ease',
               }}
             >
-              {expanded ? `Show less \u25B2` : `Show all ${filtered.length} transactions \u25BC`}
+              {expanded ? `${t('history.showLess')} \u25B2` : `${t('history.showAll', { n: filtered.length })} \u25BC`}
             </button>
           )}
         </>
@@ -391,6 +394,7 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [activeTab, setActiveTab] = useState<'analytics' | 'transactions'>('analytics');
+  const [userLang, setUserLang] = useState('en');
 
   // Fetch all data
   useEffect(() => {
@@ -457,6 +461,18 @@ export default function HistoryPage() {
     }
     load();
     return () => { cancelled = true; };
+  }, []);
+
+  // Fetch user language preference
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from('profiles').select('language').eq('id', user.id).single()
+        .then(({ data: p }) => {
+          if (p && (p as { language: string }).language) setUserLang((p as { language: string }).language);
+        });
+    });
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -620,6 +636,11 @@ export default function HistoryPage() {
   }, [policies, payouts, claims, coinsLedger, dashboard]);
 
   // ---------------------------------------------------------------------------
+  // Translator
+  // ---------------------------------------------------------------------------
+  const t = getTranslator(userLang);
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -629,10 +650,10 @@ export default function HistoryPage() {
     return (
       <div style={{ padding: '60px 16px', textAlign: 'center' }}>
         <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
-          Something went wrong
+          {t('history.error')}
         </p>
         <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
-          Could not load history data. Pull down to refresh.
+          {t('history.errorDesc')}
         </p>
       </div>
     );
@@ -656,10 +677,10 @@ export default function HistoryPage() {
           className="serif"
           style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.03em' }}
         >
-          Analytics &amp; History
+          {t('history.title')}
         </h1>
         <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 2 }}>
-          Your protection journey at a glance
+          {t('history.subtitle')}
         </p>
       </div>
 
@@ -696,7 +717,7 @@ export default function HistoryPage() {
                 transition: 'all 0.2s ease',
               }}
             >
-              {tab}
+              {tab === 'analytics' ? t('history.tabAnalytics') : t('history.tabTransactions')}
             </button>
           ))}
         </div>
@@ -716,7 +737,7 @@ export default function HistoryPage() {
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p className="mono" style={{ fontSize: 9, color: 'var(--red-acc)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Premiums Paid
+                  {t('history.premiumsPaid')}
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
@@ -741,7 +762,7 @@ export default function HistoryPage() {
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p className="mono" style={{ fontSize: 9, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Payouts Received
+                  {t('history.payoutsReceived')}
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
@@ -765,7 +786,7 @@ export default function HistoryPage() {
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p className="mono" style={{ fontSize: 9, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Net Savings
+                  {t('history.netSavings')}
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
@@ -782,7 +803,7 @@ export default function HistoryPage() {
               </p>
               {analytics.totalPremiums > 0 && (
                 <p className="sans" style={{ fontSize: 10, color: 'var(--ink-30)', marginTop: 6, fontStyle: 'italic' }}>
-                  {'\u20B9'}1 paid {'\u2192'} {'\u20B9'}{analytics.roiMultiplier.toFixed(2)} back
+                  {t('history.paidBack', { n: analytics.roiMultiplier.toFixed(2) })}
                 </p>
               )}
             </div>
@@ -791,7 +812,7 @@ export default function HistoryPage() {
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p className="mono" style={{ fontSize: 9, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Return (ROI)
+                  {t('history.returnRoi')}
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
@@ -822,12 +843,12 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           <div style={{ ...CARD, marginTop: 16, padding: '18px 16px 14px' }}>
             <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>
-              Premiums vs Payouts
+              {t('history.premiumsVsPayouts')}
             </p>
 
             {analytics.monthlyBars.length === 0 ? (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '20px 0' }}>
-                No data yet
+                {t('history.noDataYet')}
               </p>
             ) : (
               <>
@@ -835,11 +856,11 @@ export default function HistoryPage() {
                 <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <div style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(192,57,43,0.7)' }} />
-                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>Premium</span>
+                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>{t('history.legendPremium')}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <div style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(13,148,136,0.7)' }} />
-                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>Payout</span>
+                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>{t('history.legendPayout')}</span>
                   </div>
                 </div>
 
@@ -902,18 +923,18 @@ export default function HistoryPage() {
               className="mono"
               style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}
             >
-              Protection Score
+              {t('history.protectionScore')}
             </p>
 
             <ProtectionGauge score={analytics.protectionScore} />
 
             <p className="sans" style={{ fontSize: 12, color: 'var(--ink-60)', marginTop: 12, lineHeight: 1.5 }}>
               {analytics.streak > 0
-                ? `Consistent coverage, zero gaps in ${analytics.streak} week${analytics.streak !== 1 ? 's' : ''}`
-                : 'Activate a weekly plan to start building your score'}
+                ? t('history.consistentCoverage', { n: analytics.streak })
+                : t('history.activatePlan')}
             </p>
             <p className="mono" style={{ fontSize: 10, color: 'var(--teal)', marginTop: 4 }}>
-              Top {Math.max(5, 100 - analytics.protectionScore)}% in your zone
+              {t('history.topZone', { n: Math.max(5, 100 - analytics.protectionScore) })}
             </p>
           </div>
 
@@ -922,12 +943,12 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           <div style={{ ...CARD, marginTop: 16, padding: '18px 16px 14px' }}>
             <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
-              Weekly Earnings
+              {t('history.weeklyEarnings')}
             </p>
 
             {analytics.weekBuckets.every((w) => w.amount === 0) ? (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '20px 0' }}>
-                No payouts in the last 8 weeks
+                {t('history.noPayouts8Weeks')}
               </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -970,14 +991,14 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           <div style={{ ...CARD, marginTop: 16, padding: '18px 16px 14px' }}>
             <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>
-              Payout Timeline
+              {t('history.payoutTimeline')}
             </p>
 
             {claims.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <p className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>No disruptions recorded yet</p>
+                <p className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>{t('history.noDisruptions')}</p>
                 <p className="sans" style={{ fontSize: 12, color: 'var(--ink-30)', marginTop: 4 }}>
-                  When weather or other disruptions affect your zone, they will appear here.
+                  {t('history.noDisruptionsDesc')}
                 </p>
               </div>
             ) : (
@@ -1109,7 +1130,7 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           {/* Payment Ledger — with sub-tabs and collapsible                    */}
           {/* ---------------------------------------------------------------- */}
-          <PaymentLedger entries={analytics.ledger} formatDate={formatDate} formatINR={formatINR} />
+          <PaymentLedger entries={analytics.ledger} formatDate={formatDate} formatINR={formatINR} t={t} />
         </div>
       )}
     </div>

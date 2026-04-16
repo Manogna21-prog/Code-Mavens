@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { getTranslator } from '@/lib/i18n/translations';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -349,6 +351,7 @@ export default function PolicyPage() {
   const [coinsData, setCoinsData] = useState<CoinsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [userLang, setUserLang] = useState('en');
 
   const fetchAll = useCallback(async () => {
     try {
@@ -421,6 +424,19 @@ export default function PolicyPage() {
     fetchAll();
   }, [fetchAll]);
 
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from('profiles').select('language').eq('id', user.id).single()
+        .then(({ data: p }) => {
+          if (p && (p as { language: string }).language) setUserLang((p as { language: string }).language);
+        });
+    });
+  }, []);
+
+  const t = getTranslator(userLang);
+
   if (loading) return <LoadingSkeleton />;
 
   if (error || !dashboard) {
@@ -430,13 +446,13 @@ export default function PolicyPage() {
           className="serif"
           style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}
         >
-          Something went wrong
+          {t('policy2.error')}
         </p>
         <p
           className="sans"
           style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}
         >
-          Could not load policy data. Pull down to refresh.
+          {t('policy2.errorDesc')}
         </p>
       </div>
     );
@@ -488,7 +504,7 @@ export default function PolicyPage() {
           marginBottom: 20,
         }}
       >
-        My Policy
+        {t('policy2.title')}
       </h1>
 
       {!policy ? (
@@ -497,13 +513,13 @@ export default function PolicyPage() {
             className="serif"
             style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}
           >
-            No active policy
+            {t('policy2.noPolicy')}
           </p>
           <p
             className="sans"
             style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}
           >
-            Subscribe to a plan to get coverage.
+            {t('policy2.noPolicyDesc')}
           </p>
           <a
             href="/onboarding"
@@ -519,7 +535,7 @@ export default function PolicyPage() {
               textDecoration: 'none',
             }}
           >
-            Get Covered
+            {t('policy2.getCovered')}
           </a>
         </div>
       ) : (
@@ -540,7 +556,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.08em' }}
                 >
-                  POLICY ID
+                  {t('policy2.policyId')}
                 </p>
                 <p
                   className="mono"
@@ -561,7 +577,7 @@ export default function PolicyPage() {
                     : { color: 'var(--teal)', border: '1px solid var(--teal)' }),
                 }}
               >
-                {isExpired ? 'EXPIRED' : 'ACTIVE'}
+                {isExpired ? t('policy2.expired') : t('policy2.active')}
               </span>
             </div>
 
@@ -570,7 +586,7 @@ export default function PolicyPage() {
                 className="sans"
                 style={{ fontSize: 14, color: 'var(--ink-60)' }}
               >
-                Policy Holder
+                {t('policy2.policyHolder')}
               </p>
               <p
                 className="serif"
@@ -593,7 +609,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  ZONE
+                  {t('policy2.zoneLbl')}
                 </p>
                 <p
                   className="sans"
@@ -607,7 +623,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  PLAN TIER
+                  {t('policy2.planTier')}
                 </p>
                 <span
                   className="mono"
@@ -643,7 +659,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  COVERAGE PERIOD
+                  {t('policy2.coveragePeriod')}
                 </p>
                 <p
                   className="sans"
@@ -657,7 +673,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  PREMIUM
+                  {t('policy2.premium')}
                 </p>
                 <p
                   className="serif"
@@ -673,7 +689,7 @@ export default function PolicyPage() {
                     className="mono"
                     style={{ fontSize: 11, fontWeight: 400, color: 'var(--ink-30)' }}
                   >
-                    /week
+                    {t('policy2.perWeek')}
                   </span>
                 </p>
               </div>
@@ -690,7 +706,7 @@ export default function PolicyPage() {
                 className="mono"
                 style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
               >
-                MAX WEEKLY PAYOUT
+                {t('policy2.maxPayout')}
               </p>
               <p
                 className="serif"
@@ -710,11 +726,11 @@ export default function PolicyPage() {
           {/* Section 2: Premium Breakdown                                    */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Premium Breakdown</SectionLabel>
+            <SectionLabel>{t('policy2.premiumBreakdown')}</SectionLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
-                  Base Premium ({tier})
+                  {t('policy2.basePremium')} ({tier})
                 </span>
                 <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
                   {'\u20B9'}{basePremium}
@@ -723,7 +739,7 @@ export default function PolicyPage() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
-                  Weather Risk Addon
+                  {t('policy2.weatherAddon')}
                 </span>
                 <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: 'var(--teal)' }}>
                   +{'\u20B9'}{weatherAddon.toFixed(2)}
@@ -732,7 +748,7 @@ export default function PolicyPage() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
-                  UBI Addon (Zone Risk)
+                  {t('policy2.ubiAddon')}
                 </span>
                 <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: 'var(--teal)' }}>
                   +{'\u20B9'}{ubiAddon.toFixed(2)}
@@ -749,10 +765,10 @@ export default function PolicyPage() {
                 }}
               >
                 <span className="sans" style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>
-                  Total
+                  {t('policy2.total')}
                 </span>
                 <span className="serif" style={{ fontSize: 18, fontWeight: 900, color: 'var(--teal)' }}>
-                  {'\u20B9'}{Number(totalPremium).toFixed(2)}/week
+                  {'\u20B9'}{Number(totalPremium).toFixed(2)}{t('policy2.perWeek')}
                 </span>
               </div>
             </div>
@@ -772,7 +788,7 @@ export default function PolicyPage() {
                     : {}
             }
           >
-            <SectionLabel>Coverage Status</SectionLabel>
+            <SectionLabel>{t('policy2.coverageStatus')}</SectionLabel>
 
             {isExpired ? (
               <>
@@ -780,13 +796,13 @@ export default function PolicyPage() {
                   className="sans"
                   style={{ fontSize: 14, fontWeight: 600, color: 'var(--red-acc)' }}
                 >
-                  Your coverage has expired.
+                  {t('policy2.coverageExpired')}
                 </p>
                 <p
                   className="sans"
                   style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 4 }}
                 >
-                  Renew now to stay protected against disruptions.
+                  {t('policy2.renewProtected')}
                 </p>
               </>
             ) : isUrgent ? (
@@ -795,13 +811,13 @@ export default function PolicyPage() {
                   className="sans"
                   style={{ fontSize: 14, fontWeight: 600, color: '#d97706' }}
                 >
-                  Your coverage expires in {daysLeft} day{daysLeft !== 1 ? 's' : ''}!
+                  {daysLeft} {t('policy2.daysRemaining')}!
                 </p>
                 <p
                   className="sans"
                   style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 4 }}
                 >
-                  Renew now to avoid gaps in protection.
+                  {t('policy2.renewGaps')}
                 </p>
               </>
             ) : isReminder ? (
@@ -810,13 +826,13 @@ export default function PolicyPage() {
                   className="sans"
                   style={{ fontSize: 14, fontWeight: 500, color: 'var(--teal)' }}
                 >
-                  {daysLeft} days remaining on your current policy.
+                  {daysLeft} {t('policy2.daysRemaining')}.
                 </p>
                 <p
                   className="sans"
                   style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 4 }}
                 >
-                  Your coverage is valid until {formatDate(policy.week_end)}.
+                  {t('policy2.coveredUntil')} {formatDate(policy.week_end)}.
                 </p>
               </>
             ) : (
@@ -825,13 +841,13 @@ export default function PolicyPage() {
                   className="sans"
                   style={{ fontSize: 14, fontWeight: 500, color: 'var(--teal)' }}
                 >
-                  You are covered.
+                  {t('policy2.youAreCovered')}
                 </p>
                 <p
                   className="sans"
                   style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 4 }}
                 >
-                  Policy valid until {formatDate(policy.week_end)} ({daysLeft} days remaining).
+                  {t('policy2.coveredUntil')} {formatDate(policy.week_end)} ({daysLeft} {t('policy2.daysRemaining')}).
                 </p>
               </>
             )}
@@ -851,7 +867,7 @@ export default function PolicyPage() {
                   textDecoration: 'none',
                 }}
               >
-                Renew Now
+                {t('policy2.renewNow')}
               </a>
             )}
           </SectionCard>
@@ -860,7 +876,7 @@ export default function PolicyPage() {
           {/* Section 4: Rewards Summary                                     */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Rewards</SectionLabel>
+            <SectionLabel>{t('policy2.rewardsSection')}</SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               <div
                 style={{
@@ -875,7 +891,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 9, color: 'rgba(245,240,232,0.5)', letterSpacing: '0.1em' }}
                 >
-                  SAFESHIFT COINS
+                  {t('policy2.safeShiftCoins')}
                 </p>
                 <p
                   className="serif"
@@ -897,7 +913,7 @@ export default function PolicyPage() {
                     marginBottom: 8,
                   }}
                 >
-                  RECENT ACTIVITY
+                  {t('policy2.recentActivity')}
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {recentActivities.map((entry) => {
@@ -947,7 +963,7 @@ export default function PolicyPage() {
               className="sans"
               style={{ fontSize: 12, color: 'var(--ink-30)', marginTop: 12 }}
             >
-              100 coins = {'\u20B9'}5 off your next premium.
+              {t('policy2.coinsNote')}
             </p>
           </SectionCard>
 
@@ -955,7 +971,7 @@ export default function PolicyPage() {
           {/* Section 5: Risk Drivers                                        */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Risk Drivers (Next 7 Days)</SectionLabel>
+            <SectionLabel>{t('policy2.riskDrivers')}</SectionLabel>
 
             {premium ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -963,7 +979,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      Rainfall forecast
+                      {t('policy2.rainfallForecast')}
                     </span>
                     <span
                       className="serif"
@@ -979,7 +995,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      AQI trend (GRAP-IV)
+                      {t('policy2.aqiTrend')}
                     </span>
                     <span
                       className="serif"
@@ -995,7 +1011,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      Historical risk (combined)
+                      {t('policy2.historicalRisk')}
                     </span>
                     <span
                       className="serif"
@@ -1011,7 +1027,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      Traffic + wind risk
+                      {t('policy2.windRisk')}
                     </span>
                     <span
                       className="serif"
@@ -1025,7 +1041,7 @@ export default function PolicyPage() {
               </div>
             ) : (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '16px 0' }}>
-                Loading risk predictions...
+                {t('policy2.loadingRisk')}
               </p>
             )}
           </SectionCard>
@@ -1034,7 +1050,7 @@ export default function PolicyPage() {
           {/* Section 6: Zone Risk Assessment                                */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Zone Risk Assessment</SectionLabel>
+            <SectionLabel>{t('policy2.zoneRiskAssessment')}</SectionLabel>
 
             {premium ? (
               <>
@@ -1050,7 +1066,7 @@ export default function PolicyPage() {
                 >
                   <div style={{ textAlign: 'center' }}>
                     <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
-                      PREMIUM IMPACT
+                      {t('policy2.premiumImpact')}
                     </p>
                     <p className="serif" style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
                       +{'\u20B9'}{ubiAddon.toFixed(2)}
@@ -1059,7 +1075,7 @@ export default function PolicyPage() {
                   <div style={{ width: 1, background: 'var(--rule)' }} />
                   <div style={{ textAlign: 'center' }}>
                     <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
-                      RISK LEVEL
+                      {t('policy2.riskLevel')}
                     </p>
                     <p
                       className="sans"
@@ -1086,7 +1102,7 @@ export default function PolicyPage() {
                         marginBottom: 10,
                       }}
                     >
-                      ZONE BREAKDOWN
+                      {t('policy2.zoneBreakdown')}
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {zoneContributions.map((z) => (
@@ -1125,7 +1141,7 @@ export default function PolicyPage() {
               </>
             ) : (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '16px 0' }}>
-                Loading zone risk data...
+                {t('policy2.loadingZone')}
               </p>
             )}
           </SectionCard>

@@ -8,9 +8,11 @@ declare global {
   }
 }
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Sparkles, ArrowRight, Send, Loader2, Mic, MicOff, Volume2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { getTranslator } from '@/lib/i18n/translations';
 
 // ─── Template questions → navigation + highlight targets ─────────────────────
 
@@ -21,32 +23,14 @@ interface TemplateAction {
   emoji: string;
 }
 
-const TEMPLATES: TemplateAction[] = [
-  {
-    question: 'How many GigPoints do I have?',
-    route: '/dashboard',
-    elementId: 'card-gigpoints',
-    emoji: '🪙',
-  },
-  {
-    question: "What's my total earnings?",
-    route: '/dashboard',
-    elementId: 'card-savings',
-    emoji: '💰',
-  },
-  {
-    question: 'Show me my active policy',
-    route: '/dashboard',
-    elementId: 'card-policy',
-    emoji: '🛡️',
-  },
-  {
-    question: 'Show my claim history',
-    route: '/dashboard/claims',
-    elementId: 'card-claims-list',
-    emoji: '📋',
-  },
-];
+function getTemplates(t: (k: string) => string): TemplateAction[] {
+  return [
+    { question: t('ai.q1'), route: '/dashboard', elementId: 'card-gigpoints', emoji: '🪙' },
+    { question: t('ai.q2'), route: '/dashboard', elementId: 'card-savings', emoji: '💰' },
+    { question: t('ai.q3'), route: '/dashboard', elementId: 'card-policy', emoji: '🛡️' },
+    { question: t('ai.q4'), route: '/dashboard/claims', elementId: 'card-claims-list', emoji: '📋' },
+  ];
+}
 
 // ─── Highlight helper ────────────────────────────────────────────────────────
 
@@ -190,8 +174,24 @@ export default function AIAssistantPage() {
   const [loading, setLoading] = useState(false);
   const [lang, setLang] = useState('en');
   const [listening, setListening] = useState(false);
+  const [userLang, setUserLang] = useState('en');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from('profiles').select('language').eq('id', user.id).single()
+        .then(({ data: p }) => {
+          if (p && (p as { language: string }).language) {
+            const l = (p as { language: string }).language;
+            setUserLang(l);
+            setLang(l);
+          }
+        });
+    });
+  }, []);
 
   function toggleMic() {
     if (listening) {
@@ -202,7 +202,7 @@ export default function AIAssistantPage() {
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
-      setMessages((prev) => [...prev, { role: 'ai', text: 'Voice input is not supported in this browser. Please use Chrome on Android or Desktop.' }]);
+      setMessages((prev) => [...prev, { role: 'ai', text: t('ai.voiceNotSupported') }]);
       return;
     }
 
@@ -229,9 +229,9 @@ export default function AIAssistantPage() {
       console.error('[SpeechRecognition] Error:', event.error);
       setListening(false);
       if (event.error === 'not-allowed') {
-        setMessages((prev) => [...prev, { role: 'ai', text: 'Microphone access was denied. Please allow microphone permission in your browser settings and try again.' }]);
+        setMessages((prev) => [...prev, { role: 'ai', text: t('ai.micDenied') }]);
       } else if (event.error === 'no-speech') {
-        setMessages((prev) => [...prev, { role: 'ai', text: 'No speech detected. Please tap the mic and speak clearly.' }]);
+        setMessages((prev) => [...prev, { role: 'ai', text: t('ai.noSpeech') }]);
       }
     };
 
@@ -285,7 +285,7 @@ export default function AIAssistantPage() {
       const data = await res.json();
       setMessages((prev) => [...prev, { role: 'ai', text: data.answer || 'No response received.' }]);
     } catch {
-      setMessages((prev) => [...prev, { role: 'ai', text: "I'm having trouble connecting. Please try again." }]);
+      setMessages((prev) => [...prev, { role: 'ai', text: t('ai.connectionError') }]);
     } finally {
       setLoading(false);
       setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
@@ -299,6 +299,8 @@ export default function AIAssistantPage() {
     }
   }
 
+  const t = getTranslator(userLang);
+  const TEMPLATES = getTemplates(t);
   const hasChat = messages.length > 0;
 
   return (
@@ -315,11 +317,11 @@ export default function AIAssistantPage() {
           <Sparkles size={28} color="#F07820" strokeWidth={2} />
         </div>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A1A1A', letterSpacing: '-0.03em', margin: '0 0 8px', fontFamily: F }}>
-          SafeShift AI
+          {t('ai.title')}
         </h1>
         {!hasChat && (
           <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.5, margin: 0, fontFamily: F }}>
-            Ask me anything about your account, or tap a quick action below.
+            {t('ai.subtitle')}
           </p>
         )}
       </div>
@@ -421,7 +423,7 @@ export default function AIAssistantPage() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                   <Sparkles size={12} color="#F07820" strokeWidth={2.5} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#F07820', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                    SafeShift AI
+                    {t('ai.title')}
                   </span>
                 </div>
               )}
@@ -442,7 +444,7 @@ export default function AIAssistantPage() {
                   onMouseLeave={(e) => { e.currentTarget.style.borderColor = '#E5E7EB'; e.currentTarget.style.color = '#6B7280'; }}
                 >
                   <Volume2 size={12} strokeWidth={2} />
-                  Listen
+                  {t('ai.listen')}
                 </button>
               )}
             </div>
@@ -457,7 +459,7 @@ export default function AIAssistantPage() {
               display: 'flex', alignItems: 'center', gap: 8,
             }}>
               <Loader2 size={16} color="#F07820" strokeWidth={2} style={{ animation: 'spin 1s linear infinite' }} />
-              <span style={{ fontSize: 14, color: '#9CA3AF', fontFamily: F }}>Thinking...</span>
+              <span style={{ fontSize: 14, color: '#9CA3AF', fontFamily: F }}>{t('ai.thinking')}</span>
               <style>{`
                 @keyframes spin { to { transform: rotate(360deg); } }
                 @keyframes pulse-mic { 0%,100% { transform: scale(1); } 50% { transform: scale(1.1); } }
@@ -484,7 +486,7 @@ export default function AIAssistantPage() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={listening ? 'Listening... speak now' : 'Ask anything about your account...'}
+          placeholder={listening ? t('ai.listening') : t('ai.placeholder')}
           disabled={loading}
           style={{
             flex: 1,
@@ -542,7 +544,7 @@ export default function AIAssistantPage() {
           textAlign: 'center', fontSize: 13, color: '#9CA3AF',
           marginTop: 20, fontFamily: F, lineHeight: 1.5,
         }}>
-          Powered by AI — answers based on your real account data.
+          {t('ai.footer')}
         </p>
       )}
     </div>

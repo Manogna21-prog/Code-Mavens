@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { getTranslator } from '@/lib/i18n/translations';
 import { TRIGGERS } from '@/lib/config/constants';
 import type { DisruptionType } from '@/lib/config/constants';
 
@@ -115,11 +116,11 @@ const STATUS_BADGE_STYLES: Record<StatusBucket, React.CSSProperties> = {
   },
 };
 
-function statusLabel(status: string): string {
+function statusLabel(status: string, t: (key: string) => string): string {
   const b = bucketStatus(status);
-  if (b === 'paid') return 'SETTLED';
-  if (b === 'rejected') return 'REJECTED';
-  return 'PROCESSING';
+  if (b === 'paid') return t('claims.settled');
+  if (b === 'rejected') return t('claims.rejected');
+  return t('claims.processing');
 }
 
 const TIMELINE_DOT_COLOR: Record<StatusBucket, string> = {
@@ -200,6 +201,7 @@ export default function ClaimsPage() {
   const [upiVerified, setUpiVerified] = useState(false);
   const [nextRenewal, setNextRenewal] = useState<string | null>(null);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [userLang, setUserLang] = useState('en');
 
   const fetchClaims = useCallback(async (userId: string) => {
     const supabase = createClient();
@@ -254,6 +256,17 @@ export default function ClaimsPage() {
     init();
   }, [fetchClaims]);
 
+  useEffect(() => {
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (!user) return;
+      supabase.from('profiles').select('language').eq('id', user.id).single()
+        .then(({ data: p }) => {
+          if (p && (p as { language: string }).language) setUserLang((p as { language: string }).language);
+        });
+    });
+  }, []);
+
   // Toggle auto-renew
   async function toggleAutoRenew() {
     if (!profileId) return;
@@ -265,6 +278,8 @@ export default function ClaimsPage() {
       .update({ auto_renew_enabled: next } as never)
       .eq('id', profileId);
   }
+
+  const t = getTranslator(userLang);
 
   // ---------- Computed stats ----------
   const totalClaims = claims.length;
@@ -307,14 +322,14 @@ export default function ClaimsPage() {
           className="serif"
           style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em', marginBottom: 16 }}
         >
-          Claims
+          {t('claims.title')}
         </h1>
         <div style={tabBarStyle}>
-          <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(false)}>Claims</button>
-          <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(true)}>Analytics</button>
+          <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(false)}>{t('claims.title')}</button>
+          <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(true)}>{t('claims.analytics')}</button>
         </div>
         <Suspense fallback={
-          <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: 14 }}>Loading analytics…</div>
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: 14 }}>{t('claims.loadingAnalytics')}</div>
         }>
           <HistoryContent />
         </Suspense>
@@ -359,11 +374,11 @@ export default function ClaimsPage() {
           className="serif"
           style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em', marginBottom: 16 }}
         >
-          Claims
+          {t('claims.title')}
         </h1>
         <div style={tabBarStyle}>
-          <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(true)}>Claims</button>
-          <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(false)}>Analytics</button>
+          <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(true)}>{t('claims.title')}</button>
+          <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(false)}>{t('claims.analytics')}</button>
         </div>
 
         <div
@@ -394,13 +409,13 @@ export default function ClaimsPage() {
             className="serif"
             style={{ fontSize: 17, fontWeight: 700, color: 'var(--ink)', marginBottom: 6 }}
           >
-            No claims yet
+            {t('claims.noClaimsYet')}
           </p>
           <p
             className="sans"
             style={{ fontSize: 13, color: 'var(--ink-60)', lineHeight: 1.5, maxWidth: 260, margin: '0 auto' }}
           >
-            We are monitoring your zone 24/7. Claims trigger automatically when disruption thresholds are breached.
+            {t('claims.noClaimsDesc')}
           </p>
         </div>
 
@@ -409,6 +424,7 @@ export default function ClaimsPage() {
           upiVerified={upiVerified}
           nextRenewal={nextRenewal}
           onToggle={toggleAutoRenew}
+          t={t}
         />
       </div>
     );
@@ -424,27 +440,27 @@ export default function ClaimsPage() {
         className="serif"
         style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em', marginBottom: 16 }}
       >
-        Claims
+        {t('claims.title')}
       </h1>
 
       <div style={tabBarStyle}>
-        <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(true)}>Claims</button>
-        <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(false)}>Analytics</button>
+        <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(true)}>{t('claims.title')}</button>
+        <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(false)}>{t('claims.analytics')}</button>
       </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
         <StatCard
-          label="Total Claims"
+          label={t('claims.totalClaims')}
           value={String(totalClaims)}
           accent="var(--ink)"
         />
         <StatCard
-          label="Received"
+          label={t('claims.received')}
           value={`\u20B9${totalReceived.toLocaleString('en-IN')}`}
           accent="var(--teal)"
         />
         <StatCard
-          label="Success Rate"
+          label={t('claims.successRate')}
           value={`${successRate}%`}
           accent={successRate >= 80 ? 'var(--teal)' : successRate >= 50 ? '#b45309' : 'var(--red-acc)'}
         />
@@ -453,7 +469,7 @@ export default function ClaimsPage() {
       {/* ---------------------------------------------------------------- */}
       {/* Section 2: Latest / Active Claim (featured card)                 */}
       {/* ---------------------------------------------------------------- */}
-      {latestClaim && <FeaturedClaimCard claim={latestClaim} />}
+      {latestClaim && <FeaturedClaimCard claim={latestClaim} t={t} />}
 
       {/* ---------------------------------------------------------------- */}
       {/* Section 3: Claims Timeline                                       */}
@@ -470,7 +486,7 @@ export default function ClaimsPage() {
               marginBottom: 16,
             }}
           >
-            Claims Timeline
+            {t('claims.timeline')}
           </p>
 
           <div style={{ position: 'relative' }}>
@@ -558,7 +574,7 @@ export default function ClaimsPage() {
                           ...STATUS_BADGE_STYLES[bucket],
                         }}
                       >
-                        {statusLabel(claim.status)}
+                        {statusLabel(claim.status, t)}
                       </span>
                     </div>
 
@@ -592,6 +608,7 @@ export default function ClaimsPage() {
         upiVerified={upiVerified}
         nextRenewal={nextRenewal}
         onToggle={toggleAutoRenew}
+        t={t}
       />
     </div>
   );
@@ -644,7 +661,7 @@ function StatCard({ label, value, accent }: { label: string; value: string; acce
 
 // ---------- Featured claim card (Section 2) ----------
 
-function FeaturedClaimCard({ claim }: { claim: ClaimRow }) {
+function FeaturedClaimCard({ claim, t }: { claim: ClaimRow; t: (key: string) => string }) {
   const bucket = bucketStatus(claim.status);
   const eventType = claim.live_disruption_events?.event_type as DisruptionType | undefined;
   const triggerCfg = eventType ? TRIGGERS[eventType] : undefined;
@@ -661,15 +678,15 @@ function FeaturedClaimCard({ claim }: { claim: ClaimRow }) {
   const noDuplicate = !claim.is_flagged;
 
   const validations: { label: string; passed: boolean | null }[] = [
-    { label: 'Environmental data verified', passed: gate1 },
+    { label: t('claims.envVerified'), passed: gate1 },
     {
       label: claim.activity_minutes != null
-        ? `Driver activity confirmed (${claim.activity_minutes}min active)`
-        : 'Driver activity confirmed',
+        ? `${t('claims.activityConfirmed')} (${claim.activity_minutes}min active)`
+        : t('claims.activityConfirmed'),
       passed: gate2,
     },
-    { label: 'GPS within zone', passed: gpsOk },
-    { label: 'No duplicate claims', passed: noDuplicate },
+    { label: t('claims.gpsInZone'), passed: gpsOk },
+    { label: t('claims.noDuplicates'), passed: noDuplicate },
   ];
 
   return (
@@ -697,7 +714,7 @@ function FeaturedClaimCard({ claim }: { claim: ClaimRow }) {
             ...STATUS_BADGE_STYLES[bucket],
           }}
         >
-          {statusLabel(claim.status)}
+          {statusLabel(claim.status, t)}
         </span>
       </div>
 
@@ -756,7 +773,7 @@ function FeaturedClaimCard({ claim }: { claim: ClaimRow }) {
             marginBottom: 10,
           }}
         >
-          Validation Checklist
+          {t('claims.validationChecklist')}
         </p>
         {validations.map((v, i) => (
           <div
@@ -799,11 +816,13 @@ function AutoRenewCard({
   upiVerified,
   nextRenewal,
   onToggle,
+  t,
 }: {
   autoRenew: boolean;
   upiVerified: boolean;
   nextRenewal: string | null;
   onToggle: () => void;
+  t: (key: string) => string;
 }) {
   return (
     <div
@@ -824,7 +843,7 @@ function AutoRenewCard({
           marginBottom: 14,
         }}
       >
-        Auto-Renew
+        {t('claims.autoRenew')}
       </p>
 
       {/* Toggle row */}
@@ -837,7 +856,7 @@ function AutoRenewCard({
         }}
       >
         <span className="sans" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
-          Weekly auto-renewal
+          {t('claims.weeklyAutoRenewal')}
         </span>
         <button
           onClick={onToggle}
@@ -881,7 +900,7 @@ function AutoRenewCard({
           }}
         />
         <span className="sans" style={{ fontSize: 12, color: 'var(--ink-60)' }}>
-          UPI Mandate: {upiVerified ? 'Active' : 'Not set up'}
+          {upiVerified ? t('claims.upiActive') : t('claims.upiNotSet')}
         </span>
       </div>
 
@@ -898,7 +917,7 @@ function AutoRenewCard({
             }}
           />
           <span className="sans" style={{ fontSize: 12, color: 'var(--ink-60)' }}>
-            Next renewal:{' '}
+            {t('claims.nextRenewal')}{' '}
             {new Date(nextRenewal).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
         </div>
