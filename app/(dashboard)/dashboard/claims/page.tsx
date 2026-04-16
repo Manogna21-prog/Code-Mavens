@@ -1,9 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { TRIGGERS } from '@/lib/config/constants';
 import type { DisruptionType } from '@/lib/config/constants';
+
+// Lazy-load the analytics/history tab content
+const HistoryContent = lazy(() => import('@/app/(dashboard)/dashboard/history/page'));
 
 // ---------------------------------------------------------------------------
 // Types
@@ -190,6 +193,7 @@ function PendingDotIcon() {
 // ---------------------------------------------------------------------------
 
 export default function ClaimsPage() {
+  const [activeTab, setActiveTab] = useState<'claims' | 'analytics'>('claims');
   const [claims, setClaims] = useState<ClaimRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [autoRenew, setAutoRenew] = useState(false);
@@ -270,6 +274,54 @@ export default function ClaimsPage() {
 
   const latestClaim = claims[0] || null;
 
+  // ---------- Tab bar (always shown) + content ----------
+  const tabBarStyle: React.CSSProperties = {
+    display: 'flex',
+    background: '#F3F4F6',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: 20,
+  };
+
+  const tabBtnStyle = (isActive: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: '9px 0',
+    fontSize: 12,
+    fontWeight: 700,
+    letterSpacing: '0.06em',
+    textTransform: 'uppercase',
+    background: isActive ? '#F07820' : 'transparent',
+    border: 'none',
+    borderRadius: 8,
+    color: isActive ? '#fff' : '#6B7280',
+    cursor: 'pointer',
+    fontFamily: "var(--font-inter),'Inter',sans-serif",
+    transition: 'all 0.2s ease',
+  });
+
+  // Analytics tab
+  if (activeTab === 'analytics') {
+    return (
+      <div style={{ padding: '20px 16px', maxWidth: 520, margin: '0 auto' }}>
+        <h1
+          className="serif"
+          style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em', marginBottom: 16 }}
+        >
+          Claims
+        </h1>
+        <div style={tabBarStyle}>
+          <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(false)}>Claims</button>
+          <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(true)}>Analytics</button>
+        </div>
+        <Suspense fallback={
+          <div style={{ textAlign: 'center', padding: '40px 0', color: '#9CA3AF', fontSize: 14 }}>Loading analytics…</div>
+        }>
+          <HistoryContent />
+        </Suspense>
+      </div>
+    );
+  }
+
   // ---------- Loading skeleton ----------
   if (loading) {
     return (
@@ -305,10 +357,14 @@ export default function ClaimsPage() {
       <div style={{ padding: '20px 16px' }}>
         <h1
           className="serif"
-          style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em', marginBottom: 24 }}
+          style={{ fontSize: 22, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em', marginBottom: 16 }}
         >
           Claims
         </h1>
+        <div style={tabBarStyle}>
+          <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(true)}>Claims</button>
+          <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(false)}>Analytics</button>
+        </div>
 
         <div
           style={{
@@ -318,7 +374,6 @@ export default function ClaimsPage() {
             borderRadius: 14,
           }}
         >
-          {/* Radar / monitoring icon */}
           <svg
             width="48"
             height="48"
@@ -349,7 +404,6 @@ export default function ClaimsPage() {
           </p>
         </div>
 
-        {/* Auto-Renew section still shown when no claims */}
         <AutoRenewCard
           autoRenew={autoRenew}
           upiVerified={upiVerified}
@@ -360,9 +414,9 @@ export default function ClaimsPage() {
     );
   }
 
-  // ---------- Main render ----------
+  // ---------- Main render (Claims tab with data) ----------
   return (
-    <div style={{ padding: '20px 16px', maxWidth: 520, margin: '0 auto' }}>
+    <div id="card-claims-list" style={{ padding: '20px 16px', maxWidth: 520, margin: '0 auto' }}>
       {/* ---------------------------------------------------------------- */}
       {/* Section 1: Claims Summary Header                                 */}
       {/* ---------------------------------------------------------------- */}
@@ -372,6 +426,11 @@ export default function ClaimsPage() {
       >
         Claims
       </h1>
+
+      <div style={tabBarStyle}>
+        <button onClick={() => setActiveTab('claims')} style={tabBtnStyle(true)}>Claims</button>
+        <button onClick={() => setActiveTab('analytics')} style={tabBtnStyle(false)}>Analytics</button>
+      </div>
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 24 }}>
         <StatCard

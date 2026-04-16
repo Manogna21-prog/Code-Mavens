@@ -23,6 +23,7 @@ const STEPS = [
 ];
 
 const STATUS_TO_STEP: Record<string, number> = {
+  registered: 0,
   language_selected: 1,
   aadhaar_verified: 2,
   documents_uploaded: 3,
@@ -173,13 +174,13 @@ export default function OnboardingPage() {
           <div
             key={i}
             className="h-1.5 flex-1 rounded-full transition-colors"
-            style={{ background: i <= currentStep ? 'var(--teal)' : 'var(--ink-10)' }}
+            style={{ background: i <= currentStep ? '#F07820' : 'var(--ink-10)' }}
           />
         ))}
       </div>
 
       {saving && (
-        <div className="mono text-xs mb-3" style={{ color: 'var(--teal)' }}>Saving...</div>
+        <div className="mono text-xs mb-3" style={{ color: '#F07820' }}>Saving...</div>
       )}
 
       {/* Step content */}

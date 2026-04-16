@@ -76,13 +76,13 @@ export default function DocumentUploadStep({
             className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors"
             style={
               dlFile
-                ? { borderColor: 'var(--teal)', background: 'var(--teal-bg)' }
+                ? { borderColor: '#F07820', background: 'rgba(240,120,32,0.10)' }
                 : { borderColor: 'var(--rule)', background: 'transparent' }
             }
             onClick={() => setDlFile(dlFile ? null : 'mock-dl-image.jpg')}
           >
             {dlFile ? (
-              <span className="sans text-sm" style={{ color: 'var(--teal-d)' }}>DL image uploaded (mock)</span>
+              <span className="sans text-sm" style={{ color: '#D4611A' }}>DL image uploaded (mock)</span>
             ) : (
               <span className="sans text-sm" style={{ color: 'var(--ink-60)' }}>Click to upload DL image</span>
             )}
@@ -115,13 +115,13 @@ export default function DocumentUploadStep({
             className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors"
             style={
               rcFile
-                ? { borderColor: 'var(--teal)', background: 'var(--teal-bg)' }
+                ? { borderColor: '#F07820', background: 'rgba(240,120,32,0.10)' }
                 : { borderColor: 'var(--rule)', background: 'transparent' }
             }
             onClick={() => setRcFile(rcFile ? null : 'mock-rc-image.jpg')}
           >
             {rcFile ? (
-              <span className="sans text-sm" style={{ color: 'var(--teal-d)' }}>RC image uploaded (mock)</span>
+              <span className="sans text-sm" style={{ color: '#D4611A' }}>RC image uploaded (mock)</span>
             ) : (
               <span className="sans text-sm" style={{ color: 'var(--ink-60)' }}>Click to upload RC image</span>
             )}
@@ -142,7 +142,7 @@ export default function DocumentUploadStep({
           type="button"
           onClick={handleSubmit}
           className="flex-1 py-3 rounded-lg font-medium transition-colors"
-          style={{ background: 'var(--teal)', color: '#fff' }}
+          style={{ background: '#F07820', color: '#fff' }}
         >
           Continue
         </button>

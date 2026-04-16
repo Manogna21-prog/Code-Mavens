@@ -75,9 +75,9 @@ export default function AadhaarKycStep({ onNext, onBack }: AadhaarKycStepProps) 
         </div>
 
         {verified ? (
-          <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: 'var(--teal-bg)', border: '1px solid var(--teal)' }}>
-            <span className="text-lg" style={{ color: 'var(--teal)' }}>&#10003;</span>
-            <span className="sans text-sm font-medium" style={{ color: 'var(--teal-d)' }}>Aadhaar verified successfully</span>
+          <div className="flex items-center gap-2 p-3 rounded-lg" style={{ background: 'rgba(240,120,32,0.10)', border: '1px solid #F07820' }}>
+            <span className="text-lg" style={{ color: '#F07820' }}>&#10003;</span>
+            <span className="sans text-sm font-medium" style={{ color: '#D4611A' }}>Aadhaar verified successfully</span>
           </div>
         ) : (
           <button
@@ -106,7 +106,7 @@ export default function AadhaarKycStep({ onNext, onBack }: AadhaarKycStepProps) 
           onClick={handleContinue}
           disabled={!verified}
           className="flex-1 py-3 rounded-lg font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-          style={{ background: 'var(--teal)', color: '#fff' }}
+          style={{ background: '#F07820', color: '#fff' }}
         >
           Continue
         </button>

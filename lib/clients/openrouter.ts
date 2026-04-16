@@ -5,7 +5,7 @@
 import { fetchWithRetry } from '@/lib/utils/retry';
 
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const DEFAULT_MODEL = 'meta-llama/llama-3.1-8b-instruct:free';
+const DEFAULT_MODEL = 'openai/gpt-oss-20b:free';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -15,7 +15,8 @@ interface ChatMessage {
 interface OpenRouterResponse {
   choices: Array<{
     message: {
-      content: string;
+      content: string | null;
+      reasoning?: string | null;
     };
   }>;
 }
@@ -49,7 +50,8 @@ export async function chatCompletion(
       timeoutMs: 15000,
     });
 
-    return response.choices?.[0]?.message?.content ?? null;
+    const msg = response.choices?.[0]?.message;
+    return msg?.content ?? msg?.reasoning ?? null;
   } catch (error) {
     console.error('[OpenRouter] Error:', error);
     return null;

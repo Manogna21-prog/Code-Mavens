@@ -62,38 +62,51 @@
 }
 
 :root {
-  /* SafeShift Design System */
-  --cream:   #f5f0e8;
-  --cream-d: #ede7d8;
-  --ink:     #111010;
-  --ink-90:  #1a1918;
-  --ink-60:  rgba(17,16,16,0.55);
-  --ink-30:  rgba(17,16,16,0.28);
-  --ink-10:  rgba(17,16,16,0.08);
+  /* SafeShift Design System — white-based */
+  --white:   #ffffff;
+  --gray-50: #f9fafb;
+  --gray-100:#f3f4f6;
+  --gray-200:#e5e7eb;
+  --gray-300:#d1d5db;
+  --gray-400:#9ca3af;
+  --gray-500:#6b7280;
+  --gray-700:#374151;
+  --gray-900:#111827;
+  --dark:    #0f172a;
   --teal:    #0d9488;
   --teal-d:  #0f766e;
-  --teal-bg: rgba(13,148,136,0.07);
-  --red-acc: #c0392b;
-  --rule:    rgba(17,16,16,0.14);
+  --teal-bg: rgba(13,148,136,0.08);
+  --teal-light: #f0fdfa;
+  --red-acc: #dc2626;
+  --rule:    #e5e7eb;
 
-  /* Shadcn semantic overrides (mapped to SafeShift tokens) */
-  --background: #f5f0e8;
-  --foreground: #111010;
-  --card: #f5f0e8;
-  --card-foreground: #111010;
-  --popover: #f5f0e8;
-  --popover-foreground: #111010;
-  --primary: #111010;
-  --primary-foreground: #f5f0e8;
-  --secondary: #ede7d8;
-  --secondary-foreground: #111010;
-  --muted: #ede7d8;
-  --muted-foreground: rgba(17,16,16,0.55);
-  --accent: rgba(13,148,136,0.07);
-  --accent-foreground: #111010;
-  --destructive: #c0392b;
-  --border: rgba(17,16,16,0.14);
-  --input: rgba(17,16,16,0.14);
+  /* Legacy aliases (keep for non-landing pages) */
+  --cream:   #ffffff;
+  --cream-d: #f9fafb;
+  --ink:     #111827;
+  --ink-90:  #1f2937;
+  --ink-60:  #6b7280;
+  --ink-30:  #9ca3af;
+  --ink-10:  #f3f4f6;
+
+  /* Shadcn semantic overrides */
+  --background: #ffffff;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-foreground: #111827;
+  --popover: #ffffff;
+  --popover-foreground: #111827;
+  --primary: #111827;
+  --primary-foreground: #ffffff;
+  --secondary: #f9fafb;
+  --secondary-foreground: #111827;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: rgba(13,148,136,0.08);
+  --accent-foreground: #111827;
+  --destructive: #dc2626;
+  --border: #e5e7eb;
+  --input: #e5e7eb;
   --ring: #0d9488;
   --chart-1: #0d9488;
   --chart-2: #0f766e;
@@ -117,15 +130,16 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: 'IBM Plex Sans', var(--font-ibm-plex-sans), sans-serif;
+    font-family: var(--font-inter), 'Inter', sans-serif;
     -webkit-font-smoothing: antialiased;
   }
   html {
     scroll-behavior: smooth;
   }
-  .serif { font-family: 'Playfair Display', var(--font-playfair), serif; }
-  .mono  { font-family: 'IBM Plex Mono', var(--font-ibm-plex-mono), monospace; }
-  .sans  { font-family: 'IBM Plex Sans', var(--font-ibm-plex-sans), sans-serif; }
+  /* Inter replaces Playfair for headings — same weight utility */
+  .serif { font-family: var(--font-inter), 'Inter', sans-serif; font-weight: 800; }
+  .mono  { font-family: var(--font-ibm-plex-mono), 'IBM Plex Mono', monospace; }
+  .sans  { font-family: var(--font-inter), 'Inter', sans-serif; }
 
   /* Admin table row hover */
   .admin-row:hover { background: var(--teal-bg); }
@@ -139,4 +153,32 @@
 @keyframes blink-pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
+}
+
+/* AI Chat — highlight pulse on target cards */
+@keyframes ai-highlight-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(240,120,32,0.55); }
+  40%  { box-shadow: 0 0 0 10px rgba(240,120,32,0.2); }
+  100% { box-shadow: 0 0 0 14px rgba(240,120,32,0); }
+}
+.ai-highlight {
+  animation: ai-highlight-pulse 0.7s ease-out 3;
+  outline: 2.5px solid #F07820;
+  outline-offset: 3px;
+  border-radius: 16px;
+  position: relative;
+  z-index: 10;
+  transition: outline-color 0.3s;
+}
+
+/* Pricing plans row — responsive stacking */
+@media (max-width: 1024px) {
+  .ss-plans-row {
+    flex-direction: column !important;
+    align-items: center !important;
+  }
+  .ss-plan-card {
+    max-width: 400px !important;
+    width: 100% !important;
+  }
 }
