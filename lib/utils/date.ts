@@ -1,5 +1,5 @@
 // ============================================================================
-// Date Utilities — IST helpers, week boundaries
+// Date Utilities — IST helpers, week boundaries, payment windows
 // ============================================================================
 
 /**
@@ -74,20 +74,26 @@ export function getNextMonday(date?: Date): Date {
 }
 
 /**
- * Check if current time is within Sunday payment window (6:00 AM - 11:59 PM IST)
+ * Check if current time is within the weekly payment window.
+ * Window: Sunday 6:00 AM IST → Monday 6:00 AM IST (24 hours)
  */
 export function isSundayPaymentWindow(): boolean {
   const ist = nowIST();
-  const day = ist.getDay(); // 0 = Sunday
-  if (day !== 0) return false;
+  const day = ist.getDay();
   const hour = ist.getHours();
-  return hour >= 6; // 6 AM to 11:59 PM
+
+  // Sunday 6:00 AM onwards
+  if (day === 0 && hour >= 6) return true;
+  // Monday before 6:00 AM
+  if (day === 1 && hour < 6) return true;
+
+  return false;
 }
 
 /**
- * Get the next Sunday date (for showing renewal window date)
+ * Get the next payment window start (next Sunday 6 AM IST)
  */
-export function getNextSunday(date?: Date): Date {
+export function getNextPaymentWindowStart(date?: Date): Date {
   const d = date ? new Date(date) : nowIST();
   const day = d.getDay();
   const daysUntilSunday = day === 0 ? 7 : 7 - day;
@@ -95,6 +101,13 @@ export function getNextSunday(date?: Date): Date {
   nextSun.setDate(d.getDate() + daysUntilSunday);
   nextSun.setHours(6, 0, 0, 0);
   return nextSun;
+}
+
+/**
+ * Get the next Sunday date (for showing renewal window date)
+ */
+export function getNextSunday(date?: Date): Date {
+  return getNextPaymentWindowStart(date);
 }
 
 /**
@@ -106,4 +119,71 @@ export function getNextWeekEnd(date?: Date): Date {
   sun.setDate(nextMon.getDate() + 6);
   sun.setHours(23, 59, 59, 999);
   return sun;
+}
+
+/**
+ * Calculate the first policy activation date for a new registration.
+ * Rule: Policy activates on the NEXT Monday that is at least 7 days away.
+ * This ensures a minimum 7-day waiting period, max 13 days.
+ *
+ * Examples (registration day → activation Monday):
+ *   Monday    → next-to-next Monday (7 days)
+ *   Tuesday   → Monday after next (13 days, since next Monday is only 6 days)
+ *   Wednesday → Monday after next (12 days)
+ *   Thursday  → Monday after next (11 days)
+ *   Friday    → Monday after next (10 days)
+ *   Saturday  → Monday after next (9 days)
+ *   Sunday    → Monday after next (8 days)
+ */
+export function getFirstPolicyStartDate(registrationDate?: Date): Date {
+  const regDate = registrationDate ? new Date(registrationDate) : nowIST();
+  const nextMonday = getNextMonday(regDate);
+
+  // Check if next Monday is at least 7 days from registration
+  const daysToNextMonday = Math.ceil(
+    (nextMonday.getTime() - regDate.getTime()) / 86400000
+  );
+
+  if (daysToNextMonday >= 7) {
+    return nextMonday;
+  }
+
+  // Not enough days — push to the Monday after that
+  const mondayAfterNext = new Date(nextMonday);
+  mondayAfterNext.setDate(nextMonday.getDate() + 7);
+  return mondayAfterNext;
+}
+
+/**
+ * Format a payment window description
+ */
+export function formatPaymentWindow(): string {
+  const nextSun = getNextPaymentWindowStart();
+  const sunStr = nextSun.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+  return `${sunStr}, 6:00 AM – Monday 6:00 AM`;
+}
+
+/**
+ * Get time remaining until payment window closes (in human-readable format)
+ * Returns null if not in payment window
+ */
+export function getPaymentWindowTimeRemaining(): string | null {
+  if (!isSundayPaymentWindow()) return null;
+
+  const ist = nowIST();
+  // Window closes Monday 6 AM
+  const closeTime = new Date(ist);
+  if (ist.getDay() === 0) {
+    // Sunday — close is tomorrow (Monday) 6 AM
+    closeTime.setDate(ist.getDate() + 1);
+  }
+  // Monday — close is today 6 AM (already handled by isSundayPaymentWindow check)
+  closeTime.setHours(6, 0, 0, 0);
+
+  const diff = closeTime.getTime() - ist.getTime();
+  if (diff <= 0) return null;
+
+  const hours = Math.floor(diff / 3600000);
+  const minutes = Math.floor((diff % 3600000) / 60000);
+  return `${hours}h ${minutes}m`;
 }

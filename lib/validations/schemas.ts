@@ -85,12 +85,15 @@ export const redeemCoinsSchema = z.object({
 
 // --- Payments ---
 export const createOrderSchema = z.object({
-  plan_id: z.string().uuid(),
-});
+  plan_id: z.string().uuid().optional(),
+  plan_slug: z.string().optional(),
+}).refine(d => d.plan_id || d.plan_slug, { message: 'plan_id or plan_slug required' });
 
 export const verifyPaymentSchema = z.object({
   razorpay_order_id: z.string(),
   razorpay_payment_id: z.string(),
   razorpay_signature: z.string(),
   plan_id: z.string().uuid(),
+  type: z.enum(['onboarding', 'renewal']).optional(),
+  dynamic_premium: z.number().optional(),
 });

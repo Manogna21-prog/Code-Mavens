@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { getTranslator } from '@/lib/i18n/translations';
+import { openRazorpayCheckout, type RazorpaySuccessResponse } from '@/lib/payments/razorpay-checkout';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -352,6 +353,11 @@ export default function PolicyPage() {
   const [coinsData, setCoinsData] = useState<CoinsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [mlLoaded, setMlLoaded] = useState(false);
+  const [userLang, setUserLang] = useState('en');
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentProcessing, setPaymentProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState('');
 
   const fetchAll = useCallback(async () => {
     try {
@@ -368,13 +374,25 @@ export default function PolicyPage() {
 
       // Phase 2: Parallel fetches for ML data and coins
       const results = await Promise.allSettled([
-        // ML premium prediction
+        // ML premium prediction (with timeout + retry)
         fetch(`${ML_URL}/predict/premium`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ city, tier, driver_id: 'driver_123' }),
-        }).then((r) => {
-          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          signal: AbortSignal.timeout(15000),
+        }).then(async (r) => {
+          if (!r.ok) {
+            // Retry once after 2 seconds
+            await new Promise(res => setTimeout(res, 2000));
+            const r2 = await fetch(`${ML_URL}/predict/premium`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ city, tier, driver_id: 'driver_123' }),
+              signal: AbortSignal.timeout(15000),
+            });
+            if (!r2.ok) throw new Error(`HTTP ${r2.status}`);
+            return r2.json() as Promise<PremiumResult>;
+          }
           return r.json() as Promise<PremiumResult>;
         }),
 
@@ -414,7 +432,9 @@ export default function PolicyPage() {
       if (results[3].status === 'fulfilled') {
         setDashboard(results[3].value);
       }
+      setMlLoaded(true);
     } catch {
+      setMlLoaded(true);
       setLoading(false);
       setError(true);
     }
@@ -446,13 +466,13 @@ export default function PolicyPage() {
           className="serif"
           style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}
         >
-          Something went wrong
+          {t('policy2.error')}
         </p>
         <p
           className="sans"
           style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}
         >
-          Could not load policy data. Pull down to refresh.
+          {t('policy2.errorDesc')}
         </p>
       </div>
     );
@@ -471,9 +491,11 @@ export default function PolicyPage() {
 
   // Premium breakdown from ML or fallback to policy data
   const basePremium = premium?.base_premium ?? (tier === 'high' ? 160 : tier === 'medium' ? 120 : 80);
-  const weatherAddon = premium?.weather_risk_addon ?? 0;
-  const ubiAddon = premium?.ubi_addon ?? 0;
   const totalPremium = premium?.final_premium ?? policy?.premium ?? 0;
+  // If ML data unavailable, derive addons from total - base
+  const mlAvailable = premium != null;
+  const weatherAddon = mlAvailable ? (premium?.weather_risk_addon ?? 0) : Math.max(0, Math.round((totalPremium - basePremium) * 0.6));
+  const ubiAddon = mlAvailable ? (premium?.ubi_addon ?? 0) : Math.max(0, Math.round((totalPremium - basePremium) * 0.4));
 
   // Risk data from ML
   const rainfallProb = premium?.breakdown.rainfall_probability ?? 0;
@@ -507,6 +529,18 @@ export default function PolicyPage() {
         {t('policy2.title')}
       </h1>
 
+      {/* Payment Success Banner */}
+      {paymentSuccess && (
+        <div style={{ marginBottom: 16, padding: '14px 16px', borderRadius: 12, background: 'rgba(34,197,94,0.08)', border: '1px solid #86EFAC' }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: '#16a34a', margin: 0 }}>
+            Payment successful! You&apos;re covered for Mon&ndash;Sun next week.
+          </p>
+          <p style={{ fontSize: 12, color: '#4B5563', margin: '4px 0 0' }}>
+            Your policy will be activated automatically on Monday morning.
+          </p>
+        </div>
+      )}
+
       {!policy ? (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
           {dashboard.last_tier ? (
@@ -531,10 +565,10 @@ export default function PolicyPage() {
           ) : (
             <>
               <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
-                No active policy
+                {t('policy2.noPolicy')}
               </p>
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
-                Subscribe to a plan to get coverage.
+                {t('policy2.noPolicyDesc')}
               </p>
               <a
                 href="/dashboard/policy/purchase"
@@ -544,7 +578,7 @@ export default function PolicyPage() {
                   fontWeight: 600, fontSize: 14, textDecoration: 'none',
                 }}
               >
-                Get Covered
+                {t('policy2.getCovered')}
               </a>
             </>
           )}
@@ -567,7 +601,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.08em' }}
                 >
-                  POLICY ID
+                  {t('policy2.policyId')}
                 </p>
                 <p
                   className="mono"
@@ -588,7 +622,7 @@ export default function PolicyPage() {
                     : { color: '#F07820', border: '1px solid #F07820' }),
                 }}
               >
-                {isExpired ? 'EXPIRED' : 'ACTIVE'}
+                {isExpired ? t('policy2.expired') : t('policy2.active')}
               </span>
             </div>
 
@@ -597,7 +631,7 @@ export default function PolicyPage() {
                 className="sans"
                 style={{ fontSize: 14, color: 'var(--ink-60)' }}
               >
-                Policy Holder
+                {t('policy2.policyHolder')}
               </p>
               <p
                 className="serif"
@@ -620,7 +654,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  ZONE
+                  {t('policy2.zoneLbl')}
                 </p>
                 <p
                   className="sans"
@@ -634,7 +668,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  PLAN TIER
+                  {t('policy2.planTier')}
                 </p>
                 <span
                   className="mono"
@@ -670,7 +704,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  COVERAGE PERIOD
+                  {t('policy2.coveragePeriod')}
                 </p>
                 <p
                   className="sans"
@@ -684,7 +718,7 @@ export default function PolicyPage() {
                   className="mono"
                   style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
                 >
-                  PREMIUM
+                  {t('policy2.premium')}
                 </p>
                 <p
                   className="serif"
@@ -700,7 +734,7 @@ export default function PolicyPage() {
                     className="mono"
                     style={{ fontSize: 11, fontWeight: 400, color: 'var(--ink-30)' }}
                   >
-                    /week
+                    {t('policy2.perWeek')}
                   </span>
                 </p>
               </div>
@@ -717,7 +751,7 @@ export default function PolicyPage() {
                 className="mono"
                 style={{ fontSize: 10, color: 'var(--ink-30)', letterSpacing: '0.05em' }}
               >
-                MAX WEEKLY PAYOUT
+                {t('policy2.maxPayout')}
               </p>
               <p
                 className="serif"
@@ -737,11 +771,11 @@ export default function PolicyPage() {
           {/* Section 2: Premium Breakdown                                    */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Premium Breakdown</SectionLabel>
+            <SectionLabel>{t('policy2.premiumBreakdown')}</SectionLabel>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
-                  Base Premium ({tier})
+                  {t('policy2.basePremium')} ({tier})
                 </span>
                 <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
                   {'\u20B9'}{basePremium}
@@ -750,7 +784,7 @@ export default function PolicyPage() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
-                  Weather Risk Addon
+                  {t('policy2.weatherAddon')}
                 </span>
                 <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: '#F07820' }}>
                   +{'\u20B9'}{weatherAddon.toFixed(2)}
@@ -759,7 +793,7 @@ export default function PolicyPage() {
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
-                  UBI Addon (Zone Risk)
+                  {t('policy2.ubiAddon')}
                 </span>
                 <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: '#F07820' }}>
                   +{'\u20B9'}{ubiAddon.toFixed(2)}
@@ -776,10 +810,10 @@ export default function PolicyPage() {
                 }}
               >
                 <span className="sans" style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>
-                  Total
+                  {t('policy2.total')}
                 </span>
                 <span className="serif" style={{ fontSize: 18, fontWeight: 900, color: '#F07820' }}>
-                  {'\u20B9'}{Number(totalPremium).toFixed(2)}/week
+                  {'\u20B9'}{Number(totalPremium).toFixed(2)}{t('policy2.perWeek')}
                 </span>
               </div>
             </div>
@@ -799,7 +833,7 @@ export default function PolicyPage() {
                     : {}
             }
           >
-            <SectionLabel>Coverage Status</SectionLabel>
+            <SectionLabel>{t('policy2.coverageStatus')}</SectionLabel>
 
             {isExpired ? (
               <>
@@ -807,52 +841,22 @@ export default function PolicyPage() {
                   className="sans"
                   style={{ fontSize: 14, fontWeight: 600, color: 'var(--red-acc)' }}
                 >
-                  Your coverage has expired.
+                  {t('policy2.coverageExpired')}
                 </p>
                 <p
                   className="sans"
                   style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 4 }}
                 >
-                  Renew now to stay protected against disruptions.
+                  {t('policy2.renewProtected')}
                 </p>
               </>
-            ) : isUrgent ? (
-              <>
-                <p
-                  className="sans"
-                  style={{ fontSize: 14, fontWeight: 600, color: '#d97706' }}
-                >
-                  Your coverage expires in {daysLeft} day{daysLeft !== 1 ? 's' : ''}!
-                </p>
-                <p
-                  className="sans"
-                  style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 4 }}
-                >
-                  Renew now to avoid gaps in protection.
-                </p>
-              </>
-            ) : isReminder ? (
+            ) : (isUrgent || isReminder) ? null : (
               <>
                 <p
                   className="sans"
                   style={{ fontSize: 14, fontWeight: 500, color: '#F07820' }}
                 >
-                  {daysLeft} days remaining on your current policy.
-                </p>
-                <p
-                  className="sans"
-                  style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 4 }}
-                >
-                  Your coverage is valid until {formatDate(policy.week_end)}.
-                </p>
-              </>
-            ) : (
-              <>
-                <p
-                  className="sans"
-                  style={{ fontSize: 14, fontWeight: 500, color: '#F07820' }}
-                >
-                  You are covered.
+                  {t('policy2.youAreCovered')}
                 </p>
                 <p
                   className="sans"
@@ -863,50 +867,183 @@ export default function PolicyPage() {
               </>
             )}
 
-            {(isExpired || isUrgent) && (
-              <a
-                href="/onboarding"
-                style={{
-                  display: 'inline-block',
-                  marginTop: 12,
-                  padding: '8px 20px',
-                  borderRadius: 8,
-                  background: isExpired ? 'var(--red-acc)' : '#d97706',
-                  color: '#fff',
-                  fontWeight: 600,
-                  fontSize: 13,
-                  textDecoration: 'none',
-                }}
-              >
-                Renew Now
-              </a>
-            )}
+            {/* Payment window + renewal info */}
+            {(() => {
+              const ist = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+              const day = ist.getDay();
+              const hour = ist.getHours();
+              const isRealWindow = (day === 0 && hour >= 6) || (day === 1 && hour < 6);
+              const isPaymentWindow = isRealWindow || process.env.NODE_ENV !== 'production'; // always show in dev
+
+              // Next payment window
+              const daysToSunday = day === 0 ? 7 : 7 - day;
+              const nextSunday = new Date(ist);
+              nextSunday.setDate(ist.getDate() + daysToSunday);
+              const nextSundayStr = nextSunday.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+
+              // Next Monday (coverage starts)
+              const nextMon = new Date(ist);
+              const daysToMon = day === 0 ? 1 : 8 - day;
+              nextMon.setDate(ist.getDate() + daysToMon);
+              const nextMonStr = nextMon.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+
+              // Next Sunday (coverage ends)
+              const coverEnd = new Date(nextMon);
+              coverEnd.setDate(nextMon.getDate() + 6);
+              const coverEndStr = coverEnd.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+
+              const dynamicPremium = premium?.final_premium ?? policy?.premium ?? '--';
+
+              if (isPaymentWindow && (isExpired || isUrgent)) {
+                // PAYMENT WINDOW IS OPEN — show pay button
+                return (
+                  <div style={{ marginTop: 12, padding: '16px', borderRadius: 12, background: 'linear-gradient(135deg, rgba(240,120,32,0.06), rgba(251,146,60,0.06))', border: '1px solid #FDBA74' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22C55E', animation: 'pulse 1.5s ease infinite' }} />
+                      <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>Payment window is OPEN</span>
+                    </div>
+                    <p style={{ fontSize: 13, color: '#4B5563', margin: '0 0 4px' }}>
+                      Pay <strong style={{ color: '#F07820' }}>₹{dynamicPremium}</strong> now to get covered for <strong>{nextMonStr} – {coverEndStr}</strong>
+                    </p>
+                    <p style={{ fontSize: 11, color: '#9CA3AF', margin: '0 0 12px' }}>
+                      Window closes Monday 6:00 AM. Premium is calculated dynamically based on your zone, weather risk, and claim history.
+                    </p>
+                    {paymentError && (
+                      <p style={{ fontSize: 12, color: '#EF4444', margin: '0 0 8px' }}>{paymentError}</p>
+                    )}
+                    <button
+                      disabled={paymentProcessing}
+                      onClick={async () => {
+                        setPaymentProcessing(true);
+                        setPaymentError('');
+                        try {
+                          // Step 1: Create weekly renewal order
+                          const orderRes = await fetch('/api/payments/create-weekly-order', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ plan_slug: tier }),
+                          });
+                          const orderData = await orderRes.json();
+                          if (!orderRes.ok) {
+                            setPaymentError(orderData.error || 'Failed to create order');
+                            setPaymentProcessing(false);
+                            return;
+                          }
+                          const { orderId, amount, plan_id: planId } = orderData;
+
+                          // Step 2: Open Razorpay checkout
+                          await openRazorpayCheckout({
+                            orderId,
+                            amount,
+                            description: 'SafeShift Weekly Renewal',
+                            onSuccess: async (response: RazorpaySuccessResponse) => {
+                              try {
+                                // Step 3: Verify payment
+                                const verifyRes = await fetch('/api/payments/verify', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    razorpay_order_id: response.razorpay_order_id,
+                                    razorpay_payment_id: response.razorpay_payment_id,
+                                    razorpay_signature: response.razorpay_signature,
+                                    plan_id: planId,
+                                    type: 'renewal',
+                                    dynamic_premium: orderData.premium_breakdown?.total,
+                                  }),
+                                });
+                                const verifyData = await verifyRes.json();
+                                if (!verifyRes.ok) {
+                                  setPaymentError(verifyData.error || 'Payment verification failed');
+                                  setPaymentProcessing(false);
+                                  return;
+                                }
+                                // Step 4: Show success, reload data
+                                setPaymentSuccess(true);
+                                setPaymentProcessing(false);
+                                fetchAll();
+                              } catch (err) {
+                                setPaymentError(err instanceof Error ? err.message : 'Verification failed');
+                                setPaymentProcessing(false);
+                              }
+                            },
+                            onFailure: (errMsg: string) => {
+                              setPaymentError(errMsg || 'Payment failed');
+                              setPaymentProcessing(false);
+                            },
+                            onDismiss: () => {
+                              setPaymentProcessing(false);
+                            },
+                          });
+                        } catch (err) {
+                          setPaymentError(err instanceof Error ? err.message : 'Payment failed');
+                          setPaymentProcessing(false);
+                        }
+                      }}
+                      style={{ padding: '10px 24px', borderRadius: 10, background: paymentProcessing ? '#ccc' : 'linear-gradient(135deg, #F07820, #FB923C)', color: '#fff', fontWeight: 700, fontSize: 14, border: 'none', cursor: paymentProcessing ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: paymentProcessing ? 0.7 : 1 }}
+                    >
+                      {paymentProcessing ? 'Processing...' : `Pay ₹${dynamicPremium} Now`}
+                    </button>
+                  </div>
+                );
+              }
+
+              if (isExpired || isUrgent) {
+                // PAYMENT WINDOW CLOSED — show when it opens next
+                return (
+                  <div style={{ marginTop: 12, padding: '14px 16px', borderRadius: 12, background: isExpired ? 'rgba(220,38,38,0.04)' : 'rgba(217,119,6,0.04)', border: `1px solid ${isExpired ? '#FCA5A5' : '#FDE68A'}` }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: isExpired ? '#dc2626' : '#d97706', margin: 0 }}>
+                      {isExpired ? 'Coverage expired' : 'Coverage expiring soon'}
+                    </p>
+                    <p style={{ fontSize: 12, color: '#6B7280', margin: '6px 0 0', lineHeight: 1.5 }}>
+                      Next payment window opens <strong>{nextSundayStr}, 6:00 AM</strong> and closes Monday 6:00 AM.
+                      Pay your premium during this window to get covered for the next week.
+                    </p>
+                  </div>
+                );
+              }
+
+              return null;
+            })()}
           </SectionCard>
 
           {/* ============================================================== */}
           {/* Section 4: Rewards Summary                                     */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Rewards</SectionLabel>
+            <SectionLabel>{t('policy2.rewardsSection')}</SectionLabel>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
               <div
                 style={{
-                  background: 'var(--ink)',
+                  background: 'linear-gradient(135deg, #F97316, #FB923C)',
                   borderRadius: 10,
-                  padding: '12px 20px',
+                  padding: '14px 20px',
                   flex: 1,
                   textAlign: 'center',
+                  position: 'relative',
+                  overflow: 'hidden',
                 }}
               >
+                {/* Coin sparkle animations */}
+                <style>{`
+                  @keyframes coinFloat1 { 0%,100%{transform:translateY(0) rotate(0deg);opacity:0.6} 50%{transform:translateY(-8px) rotate(15deg);opacity:1} }
+                  @keyframes coinFloat2 { 0%,100%{transform:translateY(0) rotate(0deg);opacity:0.4} 50%{transform:translateY(-6px) rotate(-10deg);opacity:0.8} }
+                  @keyframes coinShine { 0%{left:-30%} 100%{left:130%} }
+                `}</style>
+                {/* Floating coin icons */}
+                <span style={{ position:'absolute', top:6, left:12, fontSize:16, animation:'coinFloat1 3s ease-in-out infinite', pointerEvents:'none' }}>🪙</span>
+                <span style={{ position:'absolute', top:8, right:14, fontSize:14, animation:'coinFloat2 2.5s ease-in-out infinite 0.5s', pointerEvents:'none' }}>🪙</span>
+                <span style={{ position:'absolute', bottom:6, left:'40%', fontSize:12, animation:'coinFloat1 4s ease-in-out infinite 1s', pointerEvents:'none' }}>✨</span>
+                {/* Shine sweep */}
+                <div style={{ position:'absolute', top:0, left:'-30%', width:'20%', height:'100%', background:'linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent)', animation:'coinShine 3s ease-in-out infinite', pointerEvents:'none' }} />
                 <p
                   className="mono"
-                  style={{ fontSize: 9, color: 'rgba(245,240,232,0.5)', letterSpacing: '0.1em' }}
+                  style={{ fontSize: 9, color: 'rgba(255,255,255,0.7)', letterSpacing: '0.1em', position:'relative', zIndex:1 }}
                 >
-                  SAFESHIFT COINS
+                  {t('policy2.safeShiftCoins')}
                 </p>
                 <p
                   className="serif"
-                  style={{ fontSize: 28, fontWeight: 900, color: 'var(--cream)', marginTop: 2 }}
+                  style={{ fontSize: 28, fontWeight: 900, color: '#fff', marginTop: 2, position:'relative', zIndex:1 }}
                 >
                   {Number(coinBalance).toLocaleString('en-IN')}
                 </p>
@@ -924,7 +1061,7 @@ export default function PolicyPage() {
                     marginBottom: 8,
                   }}
                 >
-                  RECENT ACTIVITY
+                  {t('policy2.recentActivity')}
                 </p>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {recentActivities.map((entry) => {
@@ -974,7 +1111,7 @@ export default function PolicyPage() {
               className="sans"
               style={{ fontSize: 12, color: 'var(--ink-30)', marginTop: 12 }}
             >
-              100 coins = {'\u20B9'}5 off your next premium.
+              {t('policy2.coinsNote')}
             </p>
           </SectionCard>
 
@@ -982,7 +1119,7 @@ export default function PolicyPage() {
           {/* Section 5: Risk Drivers                                        */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Risk Drivers (Next 7 Days)</SectionLabel>
+            <SectionLabel>{t('policy2.riskDrivers')}</SectionLabel>
 
             {premium ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -990,7 +1127,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      Rainfall forecast
+                      {t('policy2.rainfallForecast')}
                     </span>
                     <span
                       className="serif"
@@ -1006,7 +1143,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      AQI trend (GRAP-IV)
+                      {t('policy2.aqiTrend')}
                     </span>
                     <span
                       className="serif"
@@ -1022,7 +1159,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      Historical risk (combined)
+                      {t('policy2.historicalRisk')}
                     </span>
                     <span
                       className="serif"
@@ -1038,7 +1175,7 @@ export default function PolicyPage() {
                 <div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
                     <span className="sans" style={{ fontSize: 13, color: 'var(--ink)' }}>
-                      Traffic + wind risk
+                      {t('policy2.windRisk')}
                     </span>
                     <span
                       className="serif"
@@ -1052,7 +1189,7 @@ export default function PolicyPage() {
               </div>
             ) : (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '16px 0' }}>
-                Loading risk predictions...
+                {mlLoaded ? 'Risk predictions unavailable — ML service offline' : 'Loading risk predictions...'}
               </p>
             )}
           </SectionCard>
@@ -1061,7 +1198,7 @@ export default function PolicyPage() {
           {/* Section 6: Zone Risk Assessment                                */}
           {/* ============================================================== */}
           <SectionCard>
-            <SectionLabel>Zone Risk Assessment</SectionLabel>
+            <SectionLabel>{t('policy2.zoneRiskAssessment')}</SectionLabel>
 
             {premium ? (
               <>
@@ -1077,7 +1214,7 @@ export default function PolicyPage() {
                 >
                   <div style={{ textAlign: 'center' }}>
                     <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
-                      PREMIUM IMPACT
+                      {t('policy2.premiumImpact')}
                     </p>
                     <p className="serif" style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink)' }}>
                       +{'\u20B9'}{ubiAddon.toFixed(2)}
@@ -1086,7 +1223,7 @@ export default function PolicyPage() {
                   <div style={{ width: 1, background: 'var(--rule)' }} />
                   <div style={{ textAlign: 'center' }}>
                     <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
-                      RISK LEVEL
+                      {t('policy2.riskLevel')}
                     </p>
                     <p
                       className="sans"
@@ -1113,7 +1250,7 @@ export default function PolicyPage() {
                         marginBottom: 10,
                       }}
                     >
-                      ZONE BREAKDOWN
+                      {t('policy2.zoneBreakdown')}
                     </p>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {zoneContributions.map((z) => (
@@ -1152,7 +1289,7 @@ export default function PolicyPage() {
               </>
             ) : (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '16px 0' }}>
-                Loading zone risk data...
+                {mlLoaded ? 'Zone data unavailable — ML service offline' : 'Loading zone risk data...'}
               </p>
             )}
           </SectionCard>
@@ -1276,7 +1413,7 @@ export default function PolicyPage() {
                     }}
                   />
                   <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', lineHeight: 1.5 }}>
-                    Detailed breakdown loading... Weather and zone risk data will appear shortly.
+                    {mlLoaded ? 'Detailed breakdown unavailable — ML service offline.' : 'Detailed breakdown loading... Weather and zone risk data will appear shortly.'}
                   </p>
                 </div>
               )}

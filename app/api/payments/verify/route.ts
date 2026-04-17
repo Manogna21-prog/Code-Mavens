@@ -1,6 +1,6 @@
 // ============================================================================
 // POST /api/payments/verify — Verify Razorpay payment signature
-// On success: create weekly_policy, mark onboarding complete
+// Supports both onboarding (first payment) and renewal (weekly) flows
 // ============================================================================
 
 import { NextResponse } from 'next/server';
@@ -9,7 +9,7 @@ import { getSession } from '@/lib/utils/auth';
 import { verifyPaymentSchema } from '@/lib/validations/schemas';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { razorpayKeySecret } from '@/lib/config/env';
-import { getWeekStart, getWeekEnd, formatDate } from '@/lib/utils/date';
+import { getWeekStart, getWeekEnd, getNextMonday, getNextWeekEnd, getFirstPolicyStartDate, formatDate } from '@/lib/utils/date';
 import { validatePaymentVerification } from 'razorpay/dist/utils/razorpay-utils';
 import type { PlanPackageRow } from '@/lib/types/database';
 
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
 
     const body = await parseBody(request, verifyPaymentSchema);
     const profileId = session.user.id;
+    const paymentType = body.type || 'onboarding';
 
     // Verify the Razorpay signature
     const isValid = validatePaymentVerification(
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
       .update({
         razorpay_payment_id: body.razorpay_payment_id,
         razorpay_signature: body.razorpay_signature,
-        status: 'paid',
+        status: 'captured',
         updated_at: new Date().toISOString(),
       } as never)
       .eq('razorpay_order_id', body.razorpay_order_id)
@@ -69,9 +70,44 @@ export async function POST(request: Request) {
 
     const plan = planRaw as unknown as PlanPackageRow;
 
-    // Create weekly_policy for this week (Mon-Sun)
-    const weekStart = getWeekStart();
-    const weekEnd = getWeekEnd();
+    // Determine premium amount
+    const premiumAmount = body.dynamic_premium ?? plan.weekly_premium_inr;
+
+    let weekStart: Date;
+    let weekEnd: Date;
+    let isActive: boolean;
+
+    if (paymentType === 'renewal') {
+      // --- RENEWAL FLOW ---
+      // Create policy for NEXT week (Mon-Sun)
+      weekStart = getNextMonday();
+      weekEnd = getNextWeekEnd();
+      isActive = false; // activate-policies cron will activate it on Monday
+    } else {
+      // --- ONBOARDING FLOW ---
+      // Check if this is a first-time purchase (no existing policies)
+      const { count } = await supabase
+        .from('weekly_policies')
+        .select('*', { count: 'exact', head: true })
+        .eq('profile_id', profileId);
+
+      const isFirstTime = (count ?? 0) === 0;
+
+      if (isFirstTime) {
+        // First-time: use getFirstPolicyStartDate (7-13 day waiting period)
+        weekStart = getFirstPolicyStartDate();
+        const weekEndDate = new Date(weekStart);
+        weekEndDate.setDate(weekStart.getDate() + 6);
+        weekEndDate.setHours(23, 59, 59, 999);
+        weekEnd = weekEndDate;
+        isActive = false; // cron will activate it later
+      } else {
+        // Returning user onboarding: current week
+        weekStart = getWeekStart();
+        weekEnd = getWeekEnd();
+        isActive = true;
+      }
+    }
 
     const { data: policyRaw, error: policyError } = await supabase
       .from('weekly_policies')
@@ -83,8 +119,8 @@ export async function POST(request: Request) {
         base_premium_inr: plan.weekly_premium_inr,
         weather_risk_addon: 0,
         ubi_addon: 0,
-        final_premium_inr: plan.weekly_premium_inr,
-        is_active: true,
+        final_premium_inr: premiumAmount,
+        is_active: isActive,
         payment_status: 'paid',
         razorpay_order_id: body.razorpay_order_id,
         razorpay_payment_id: body.razorpay_payment_id,
@@ -107,20 +143,24 @@ export async function POST(request: Request) {
       .eq('razorpay_order_id', body.razorpay_order_id)
       .eq('profile_id', profileId);
 
-    // Mark onboarding complete
-    await supabase
-      .from('profiles')
-      .update({
-        onboarding_status: 'complete',
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq('id', profileId);
+    // Mark onboarding complete only for onboarding flow
+    if (paymentType === 'onboarding') {
+      await supabase
+        .from('profiles')
+        .update({
+          onboarding_status: 'complete',
+          updated_at: new Date().toISOString(),
+        } as never)
+        .eq('id', profileId);
+    }
 
     return successResponse({
       success: true,
       policy_id: policy.id,
       week_start: formatDate(weekStart),
       week_end: formatDate(weekEnd),
+      is_active: isActive,
+      type: paymentType,
     });
   } catch (error) {
     return errorResponse(error);

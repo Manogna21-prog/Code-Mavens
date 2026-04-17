@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { PLAN_PACKAGES, type TierType } from '@/lib/config/constants';
+import { openRazorpayCheckout, type RazorpaySuccessResponse } from '@/lib/payments/razorpay-checkout';
+import { getFirstPolicyStartDate } from '@/lib/utils/date';
 
 interface PaymentStepProps {
   tier: TierType;
@@ -17,26 +19,78 @@ export default function PaymentStep({ tier, city, onNext, onBack }: PaymentStepP
   const plan = PLAN_PACKAGES.find((p) => p.slug === tier);
   if (!plan) return null;
 
+  // Calculate expected first policy activation date
+  const activationDate = getFirstPolicyStartDate();
+  const activationDateStr = activationDate.toLocaleDateString('en-IN', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
   const handlePay = async () => {
     setProcessing(true);
     setError('');
 
     try {
-      // Create a demo policy via API
-      const res = await fetch('/api/payments/simulate-payout', {
+      // Step 1: Create Razorpay order
+      const orderRes = await fetch('/api/payments/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan_slug: tier }),
       });
 
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error || 'Payment failed');
+      const orderData = await orderRes.json();
+      if (!orderRes.ok) {
+        setError(orderData.error || 'Failed to create payment order');
         setProcessing(false);
         return;
       }
 
-      onNext();
+      const { orderId, amount, plan_id: planId } = orderData;
+
+      // Step 2: Open Razorpay checkout
+      await openRazorpayCheckout({
+        orderId,
+        amount,
+        description: `SafeShift ${plan.name} Plan - Weekly Premium`,
+        onSuccess: async (response: RazorpaySuccessResponse) => {
+          try {
+            // Step 3: Verify payment
+            const verifyRes = await fetch('/api/payments/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
+                plan_id: planId,
+                type: 'onboarding',
+              }),
+            });
+
+            const verifyData = await verifyRes.json();
+            if (!verifyRes.ok) {
+              setError(verifyData.error || 'Payment verification failed');
+              setProcessing(false);
+              return;
+            }
+
+            // Step 4: Proceed to next step
+            onNext();
+          } catch (verifyErr) {
+            setError(verifyErr instanceof Error ? verifyErr.message : 'Payment verification failed');
+            setProcessing(false);
+          }
+        },
+        onFailure: (errorMsg: string) => {
+          setError(errorMsg || 'Payment failed. Please try again.');
+          setProcessing(false);
+        },
+        onDismiss: () => {
+          setProcessing(false);
+        },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment failed');
       setProcessing(false);
@@ -88,6 +142,17 @@ export default function PaymentStep({ tier, city, onNext, onBack }: PaymentStepP
         </div>
       </div>
 
+      {/* Waiting Period Notice */}
+      <div className="rounded-lg p-4 mb-4" style={{ background: 'rgba(240,120,32,0.06)', border: '1px solid rgba(240,120,32,0.2)' }}>
+        <p className="sans text-sm font-semibold mb-1" style={{ color: '#F07820' }}>
+          7-13 Day Waiting Period
+        </p>
+        <p className="sans text-xs" style={{ color: 'var(--ink-60)', lineHeight: 1.5 }}>
+          Your policy will activate on <strong style={{ color: 'var(--ink)' }}>{activationDateStr}</strong>.
+          You&apos;ll be covered from that Monday. This waiting period applies only to your first policy.
+        </p>
+      </div>
+
       {error && <p className="text-sm mb-3" style={{ color: 'var(--red-acc)' }}>{error}</p>}
 
       <div className="flex gap-3">
@@ -112,7 +177,7 @@ export default function PaymentStep({ tier, city, onNext, onBack }: PaymentStepP
       </div>
 
       <p className="mono text-xs text-center mt-4" style={{ color: 'var(--ink-30)' }}>
-        Demo mode — no real payment charged.
+        Powered by Razorpay. Payments are secure and encrypted.
       </p>
     </div>
   );

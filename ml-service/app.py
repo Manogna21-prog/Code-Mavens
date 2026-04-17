@@ -12,11 +12,16 @@ Endpoints:
 import os
 import json
 import warnings
+import time
 import numpy as np
 import pandas as pd
 import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 warnings.filterwarnings('ignore', message='Unverified HTTPS request')
+
+# Simple in-memory cache for weather data (avoid Open-Meteo 429 rate limits)
+_weather_cache: dict = {}
+CACHE_TTL_SECONDS = 3600  # 1 hour
 import requests
 import joblib
 from datetime import datetime, timedelta
@@ -86,9 +91,17 @@ TIER_BASE_PREMIUM = {"normal": 80, "medium": 120, "high": 160}
 def fetch_recent_weather(lat: float, lng: float, as_of_date: str, days: int = 35) -> pd.DataFrame:
     """
     Fetch daily weather data ending on as_of_date.
-    as_of_date: YYYY-MM-DD string — the "today" for the prediction.
+    Uses in-memory cache (1 hour TTL) to avoid Open-Meteo 429 rate limits.
     Falls back to progressively earlier dates if archive API doesn't have recent data.
     """
+    # Check cache first
+    cache_key = f"{lat:.2f}_{lng:.2f}_{as_of_date}_{days}"
+    if cache_key in _weather_cache:
+        cached_time, cached_df = _weather_cache[cache_key]
+        if time.time() - cached_time < CACHE_TTL_SECONDS:
+            print(f"[Weather] Cache hit for {cache_key}")
+            return cached_df
+
     end = datetime.strptime(as_of_date, "%Y-%m-%d")
 
     # Try with the given date, then fall back up to 7 days earlier
@@ -107,30 +120,44 @@ def fetch_recent_weather(lat: float, lng: float, as_of_date: str, days: int = 35
             "timezone": "Asia/Kolkata",
         }
 
-        try:
-            resp = requests.get(url, params=params, timeout=15, verify=False)
-            resp.raise_for_status()
-            data = resp.json()
+        # Retry with backoff for 429 rate limits
+        for attempt in range(3):
+            try:
+                resp = requests.get(url, params=params, timeout=15, verify=False)
+                if resp.status_code == 429:
+                    wait = 2 ** (attempt + 1)  # 2s, 4s, 8s
+                    print(f"[Weather] Rate limited (429), waiting {wait}s before retry...")
+                    import time as _t
+                    _t.sleep(wait)
+                    continue
+                resp.raise_for_status()
+                data = resp.json()
 
-            if "daily" not in data or not data["daily"].get("time"):
-                continue  # empty response, try earlier date
+                if "daily" not in data or not data["daily"].get("time"):
+                    break  # empty response, try earlier date
 
-            return pd.DataFrame({
-                "date": pd.to_datetime(data["daily"]["time"]),
-                "precipitation_mm": data["daily"]["precipitation_sum"],
-                "rain_mm": data["daily"]["rain_sum"],
-                "wind_speed_max_kmh": data["daily"]["wind_speed_10m_max"],
-                "wind_gusts_max_kmh": data["daily"]["wind_gusts_10m_max"],
-                "temp_max_c": data["daily"]["temperature_2m_max"],
-                "temp_min_c": data["daily"]["temperature_2m_min"],
-                "temp_mean_c": data["daily"]["temperature_2m_mean"],
-                "humidity_mean": data["daily"]["relative_humidity_2m_mean"],
-                "pressure_mean_hpa": data["daily"]["surface_pressure_mean"],
-                "cloud_cover_mean": data["daily"]["cloud_cover_mean"],
-            })
-        except Exception as e:
-            print(f"[Weather] Attempt with end_date={actual_end.strftime('%Y-%m-%d')} failed: {e}")
-            continue
+                df = pd.DataFrame({
+                    "date": pd.to_datetime(data["daily"]["time"]),
+                    "precipitation_mm": data["daily"]["precipitation_sum"],
+                    "rain_mm": data["daily"]["rain_sum"],
+                    "wind_speed_max_kmh": data["daily"]["wind_speed_10m_max"],
+                    "wind_gusts_max_kmh": data["daily"]["wind_gusts_10m_max"],
+                    "temp_max_c": data["daily"]["temperature_2m_max"],
+                    "temp_min_c": data["daily"]["temperature_2m_min"],
+                    "temp_mean_c": data["daily"]["temperature_2m_mean"],
+                    "humidity_mean": data["daily"]["relative_humidity_2m_mean"],
+                    "pressure_mean_hpa": data["daily"]["surface_pressure_mean"],
+                    "cloud_cover_mean": data["daily"]["cloud_cover_mean"],
+                })
+
+                # Cache the result
+                _weather_cache[cache_key] = (time.time(), df)
+                return df
+            except Exception as e:
+                if attempt < 2:
+                    continue
+                print(f"[Weather] Attempt with end_date={actual_end.strftime('%Y-%m-%d')} failed: {e}")
+                break
 
     raise Exception(f"Could not fetch weather data for any date near {as_of_date}")
 

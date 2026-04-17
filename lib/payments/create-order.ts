@@ -46,7 +46,7 @@ export async function createOrder({ profileId, planId }: CreateOrderInput): Prom
   const order = await razorpay.orders.create({
     amount: amountPaise,
     currency: 'INR',
-    receipt: `safeshift_${profileId}_${Date.now()}`,
+    receipt: `ss_${profileId.slice(0, 8)}_${Date.now().toString(36)}`,
     notes: {
       profile_id: profileId,
       plan_id: planId,
