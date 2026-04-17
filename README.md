@@ -5,7 +5,7 @@
 **Team Code Mavens | Guidewire DEVTrails 2026 Hackathon**
 
 ---
-## 📊 Presentation
+## 📊 Pitch Deck
 You can find the presentation [here](https://docs.google.com/presentation/d/1U15S4zKos0tjaoWISsSvmxr3tVVnE4XE/edit?usp=sharing&ouid=111603720095835270884&rtpof=true&sd=true).
 
 
