@@ -94,8 +94,8 @@ function Legend() {
         bottom: 16,
         right: 16,
         zIndex: 1000,
-        background: 'var(--cream, #faf8f3)',
-        border: '1px solid var(--rule, #e5e2db)',
+        background: '#ffffff',
+        border: '1px solid #E8E8EA',
         borderRadius: 8,
         padding: '10px 14px',
         fontSize: 12,
@@ -104,18 +104,18 @@ function Legend() {
         pointerEvents: 'auto',
       }}
     >
-      <div style={{ fontWeight: 600, marginBottom: 4, color: 'var(--ink, #1a1a1a)' }}>Risk Level</div>
+      <div style={{ fontWeight: 600, marginBottom: 4, color: '#1A1A1A' }}>Risk Level</div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#22c55e' }} />
-        <span style={{ color: 'var(--ink-60, #666)' }}>Safe</span>
+        <span style={{ color: '#6B7280' }}>Safe</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#f59e0b' }} />
-        <span style={{ color: 'var(--ink-60, #666)' }}>Watch</span>
+        <span style={{ color: '#6B7280' }}>Watch</span>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
         <span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} />
-        <span style={{ color: 'var(--ink-60, #666)' }}>Disrupted</span>
+        <span style={{ color: '#6B7280' }}>Disrupted</span>
       </div>
     </div>
   );
@@ -169,7 +169,7 @@ export default function ZoneRiskMap({ zones, cityLat, cityLng, cityName }: ZoneR
                   <div style={{ fontWeight: 700, marginBottom: 4 }}>{z.name}</div>
                   <div>
                     Risk: <strong style={{ color }}>{(z.risk_score * 100).toFixed(0)}%</strong>{' '}
-                    <span style={{ color: 'var(--ink-60, #666)' }}>({riskLabel(z.risk_score)})</span>
+                    <span style={{ color: '#6B7280' }}>({riskLabel(z.risk_score)})</span>
                   </div>
                   {z.risk_factors.length > 0 && (
                     <div style={{ marginTop: 4 }}>

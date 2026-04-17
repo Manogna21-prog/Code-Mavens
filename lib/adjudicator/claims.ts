@@ -5,6 +5,8 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isWithinCircle } from '@/lib/utils/geo';
 import { CLAIM_RULES } from '@/lib/config/constants';
+import { runAllFraudChecks, updateTrustScore } from '@/lib/fraud/detector';
+import { simulatePayout } from '@/lib/payments/simulate-payout';
 import type { TriggerCandidate } from './types';
 import type { DisruptionType } from '@/lib/config/constants';
 
@@ -51,7 +53,7 @@ export async function processClaimsForEvent(
 
   const policies = policiesRaw as unknown as PolicyRow[];
   let claimsCreated = 0;
-  const payoutsInitiated = 0;
+  let payoutsInitiated = 0;
 
   for (const policy of policies) {
     const profile = policy.profiles;
@@ -105,7 +107,7 @@ export async function processClaimsForEvent(
     if ((existing || 0) > 0) continue;
 
     // Create claim (Gate 1 passed by adjudicator)
-    const { error: claimError } = await supabase
+    const { data: newClaim, error: claimError } = await supabase
       .from('parametric_claims')
       .insert({
         policy_id: policy.id,
@@ -116,14 +118,56 @@ export async function processClaimsForEvent(
         gate1_passed: true,
         gate1_checked_at: new Date().toISOString(),
         fraud_score: 0,
-      } as never);
+      } as never)
+      .select('id')
+      .single();
 
-    if (claimError) {
+    if (claimError || !newClaim) {
       console.error('[Claims] Error creating claim:', claimError);
       continue;
     }
 
+    const claimId = (newClaim as unknown as { id: string }).id;
     claimsCreated++;
+
+    // ── ZERO-TOUCH AUTOMATED PIPELINE ──────────────────────────────
+    // Gate 2: Auto-pass for parametric claims (trigger IS the proof)
+    // In parametric insurance, the environmental trigger = verification.
+    // Driver zone check was done above (geofence). Activity check is
+    // relaxed for parametric — the driver just needs to be registered.
+    await supabase.from('parametric_claims').update({
+      gate2_passed: true,
+      gate2_checked_at: new Date().toISOString(),
+      gps_within_zone: true, // already verified by geofence above
+      status: 'gate2_passed',
+    } as never).eq('id', claimId);
+
+    // Fraud checks: run all signals
+    const fraudResult = await runAllFraudChecks(claimId);
+    await supabase.from('parametric_claims').update({
+      fraud_score: fraudResult.fraudScore,
+      fraud_signals: fraudResult.signals as never,
+      is_flagged: fraudResult.isFlagged,
+      flag_reason: fraudResult.reasons.length > 0 ? fraudResult.reasons.join('; ') : null,
+    } as never).eq('id', claimId);
+
+    // Route: zero-touch means auto-approve OR auto-reject. No manual queue.
+    if (fraudResult.fraudScore >= 0.7) {
+      // High fraud → auto-REJECT (not manual review)
+      await supabase.from('parametric_claims').update({
+        status: 'rejected',
+        flag_reason: fraudResult.reasons.join('; ') || 'Auto-rejected: fraud score too high',
+      } as never).eq('id', claimId);
+      await updateTrustScore(policy.profile_id, false);
+      console.log(`[Claims] Claim ${claimId} auto-REJECTED (fraud: ${fraudResult.fraudScore.toFixed(2)})`);
+    } else {
+      // Approve and pay instantly
+      await supabase.from('parametric_claims').update({ status: 'approved' } as never).eq('id', claimId);
+      const payResult = await simulatePayout(claimId, policy.profile_id, payoutAmount);
+      if (payResult.success) payoutsInitiated++;
+      await updateTrustScore(policy.profile_id, true);
+      console.log(`[Claims] Claim ${claimId} auto-APPROVED + paid (fraud: ${fraudResult.fraudScore.toFixed(2)})`);
+    }
   }
 
   return { claims_created: claimsCreated, payouts_initiated: payoutsInitiated };

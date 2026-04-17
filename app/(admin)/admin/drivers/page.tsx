@@ -53,16 +53,16 @@ export default async function AdminDriversPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="serif text-2xl font-bold">Drivers</h1>
-        <div className="mono text-sm" style={{ color: 'var(--ink-60)' }}>{drivers.length} total</div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A1A', letterSpacing: '-0.03em', fontFamily: "var(--font-inter),'Inter',sans-serif" }}>Drivers</h1>
+        <span className="mono text-sm" style={{ color: '#6B7280' }}>{drivers.length} total</span>
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--rule)' }}>
-        <div className="overflow-x-auto">
+      <div className="overflow-hidden" style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div className="overflow-x-auto" style={{ background: '#fff' }}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left" style={{ background: 'var(--cream-d)', color: 'var(--ink-60)' }}>
+              <tr className="text-left" style={{ background: 'linear-gradient(135deg, rgba(139,92,246,0.08), rgba(236,72,153,0.08))', color: '#8B5CF6', borderBottom: '1px solid rgba(139,92,246,0.1)' }}>
                 <th className="px-4 py-3 font-medium">Name</th>
                 <th className="px-4 py-3 font-medium">Phone</th>
                 <th className="px-4 py-3 font-medium">City</th>
@@ -73,20 +73,20 @@ export default async function AdminDriversPage() {
               </tr>
             </thead>
             <tbody>
-              {drivers.map((driver) => {
+              {drivers.map((driver, i) => {
                 const stats = claimsByDriver[driver.id] || { count: 0, total: 0 };
                 const trustStyle = driver.trust_score >= 0.7
-                  ? { color: 'var(--teal)' }
+                  ? { color: '#22C55E' }
                   : driver.trust_score >= 0.4
-                    ? { color: 'var(--ink-60)' }
-                    : { color: 'var(--red-acc)' };
+                    ? { color: '#6B7280' }
+                    : { color: '#dc2626' };
                 const statusComplete = driver.onboarding_status === 'complete';
 
                 return (
-                  <tr key={driver.id} className="admin-row" style={{ borderTop: '1px solid var(--ink-10)' }}>
-                    <td className="px-4 py-3 font-medium" style={{ color: 'var(--ink)' }}>{driver.full_name || 'Unnamed'}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--ink-60)' }}>{driver.phone_number || '-'}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--ink-60)' }}>{driver.city || '-'}</td>
+                  <tr key={driver.id} className="admin-row" style={{ borderTop: '1px solid #F3F4F6', background: i % 2 === 0 ? '#fff' : 'rgba(139,92,246,0.02)' }}>
+                    <td className="px-4 py-3 font-medium" style={{ color: '#1A1A1A' }}>{driver.full_name || 'Unnamed'}</td>
+                    <td className="px-4 py-3" style={{ color: '#6B7280' }}>{driver.phone_number || '-'}</td>
+                    <td className="px-4 py-3" style={{ color: '#6B7280' }}>{driver.city || '-'}</td>
                     <td className="serif px-4 py-3 font-medium" style={trustStyle}>
                       {(driver.trust_score * 100).toFixed(0)}%
                     </td>
@@ -95,21 +95,21 @@ export default async function AdminDriversPage() {
                         className="mono text-xs font-medium px-2 py-1 rounded-full"
                         style={
                           statusComplete
-                            ? { border: '1px solid var(--teal)', color: 'var(--teal)' }
-                            : { border: '1px solid var(--ink-60)', color: 'var(--ink-60)' }
+                            ? { border: '1px solid #22C55E', color: '#22C55E' }
+                            : { border: '1px solid #6B7280', color: '#6B7280' }
                         }
                       >
                         {statusComplete ? 'Complete' : driver.onboarding_status.replace(/_/g, ' ')}
                       </span>
                     </td>
-                    <td className="serif px-4 py-3" style={{ color: 'var(--ink-60)' }}>{stats.count}</td>
-                    <td className="serif px-4 py-3" style={{ color: 'var(--ink-60)' }}>₹{stats.total.toLocaleString()}</td>
+                    <td className="serif px-4 py-3" style={{ color: '#6B7280' }}>{stats.count}</td>
+                    <td className="serif px-4 py-3" style={{ color: '#6B7280' }}>{'\u20B9'}{stats.total.toLocaleString()}</td>
                   </tr>
                 );
               })}
               {drivers.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-8 text-center" style={{ color: 'var(--ink-30)' }}>
+                  <td colSpan={7} className="px-4 py-8 text-center" style={{ color: '#9CA3AF' }}>
                     No drivers registered yet
                   </td>
                 </tr>

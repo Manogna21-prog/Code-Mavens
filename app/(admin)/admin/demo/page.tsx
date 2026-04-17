@@ -19,6 +19,7 @@ export default function AdminDemoPage() {
   const [triggerValue, setTriggerValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TriggerResult | null>(null);
+  const [fireHover, setFireHover] = useState(false);
 
   const triggerConfig = TRIGGERS[eventType];
 
@@ -51,17 +52,46 @@ export default function AdminDemoPage() {
 
   return (
     <div className="space-y-6 max-w-xl">
-      <h1 className="serif text-2xl font-bold">Demo Trigger Panel</h1>
-      <p className="text-sm" style={{ color: 'var(--ink-60)' }}>Inject synthetic disruption events for testing.</p>
+      <style>{`
+        @keyframes riskSlideIn {
+          from { opacity: 0; transform: translateY(16px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        .risk-slide { animation: riskSlideIn 0.5s ease both; }
+        .risk-slide-1 { animation-delay: 0.05s; }
+        .risk-slide-2 { animation-delay: 0.1s; }
+        .risk-slide-3 { animation-delay: 0.15s; }
+        .risk-slide-4 { animation-delay: 0.2s; }
+        .risk-slide-5 { animation-delay: 0.25s; }
+        @keyframes firePulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.4); }
+          50% { box-shadow: 0 0 0 10px rgba(220,38,38,0); }
+        }
+        .fire-btn-hover {
+          animation: firePulse 1.5s ease infinite;
+        }
+      `}</style>
 
-      <div className="rounded-xl p-6 space-y-5" style={{ border: '1px solid var(--rule)' }}>
+      <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A1A', letterSpacing: '-0.03em', fontFamily: "var(--font-inter),'Inter',sans-serif" }}>Demo Trigger Panel</h1>
+
+      {/* Form Card */}
+      <div className="risk-slide risk-slide-2 p-6 space-y-5" style={{
+        background: '#fff',
+        borderRadius: 16,
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        border: '1px solid rgba(249,115,22,0.12)',
+        transition: 'box-shadow 0.2s ease',
+      }}
+      onMouseOver={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 12px 32px rgba(99,102,241,0.08)'; }}
+      onMouseOut={(e) => { (e.currentTarget as HTMLDivElement).style.boxShadow = '0 1px 3px rgba(0,0,0,0.06)'; }}
+      >
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink)' }}>City</label>
+          <label className="mono block text-sm font-medium mb-1" style={{ color: '#1A1A1A' }}>City</label>
           <select
             value={city}
             onChange={(e) => setCity(e.target.value)}
             className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ border: '1px solid var(--rule)' }}
+            style={{ border: '1px solid #E8E8EA' }}
           >
             {CITIES.map((c) => (
               <option key={c.slug} value={c.slug}>{c.name} ({c.state})</option>
@@ -70,22 +100,22 @@ export default function AdminDemoPage() {
         </div>
 
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink)' }}>Disruption Type</label>
+          <label className="mono block text-sm font-medium mb-1" style={{ color: '#1A1A1A' }}>Disruption Type</label>
           <select
             value={eventType}
             onChange={(e) => setEventType(e.target.value as DisruptionType)}
             className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ border: '1px solid var(--rule)' }}
+            style={{ border: '1px solid #E8E8EA' }}
           >
             {DISRUPTION_TYPES.map((dt) => (
               <option key={dt} value={dt}>{TRIGGERS[dt].label}</option>
             ))}
           </select>
-          <p className="text-xs mt-1" style={{ color: 'var(--ink-30)' }}>{triggerConfig.description}</p>
+          <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>{triggerConfig.description}</p>
         </div>
 
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink)' }}>
+          <label className="mono block text-sm font-medium mb-1" style={{ color: '#1A1A1A' }}>
             Severity: {severity.toFixed(1)}
           </label>
           <input
@@ -97,7 +127,7 @@ export default function AdminDemoPage() {
             onChange={(e) => setSeverity(Number(e.target.value))}
             className="w-full"
           />
-          <div className="flex justify-between text-xs" style={{ color: 'var(--ink-30)' }}>
+          <div className="flex justify-between text-xs" style={{ color: '#9CA3AF' }}>
             <span>0</span>
             <span>5</span>
             <span>10</span>
@@ -105,7 +135,7 @@ export default function AdminDemoPage() {
         </div>
 
         <div>
-          <label className="mono block text-sm font-medium mb-1" style={{ color: 'var(--ink)' }}>
+          <label className="mono block text-sm font-medium mb-1" style={{ color: '#1A1A1A' }}>
             Trigger Value ({triggerConfig.unit})
           </label>
           <input
@@ -114,9 +144,9 @@ export default function AdminDemoPage() {
             onChange={(e) => setTriggerValue(e.target.value)}
             placeholder={`Threshold: ${triggerConfig.threshold}`}
             className="w-full rounded-lg px-3 py-2 text-sm"
-            style={{ border: '1px solid var(--rule)' }}
+            style={{ border: '1px solid #E8E8EA' }}
           />
-          <p className="text-xs mt-1" style={{ color: 'var(--ink-30)' }}>
+          <p className="text-xs mt-1" style={{ color: '#9CA3AF' }}>
             Leave empty for default ({triggerConfig.threshold * 1.5} {triggerConfig.unit})
           </p>
         </div>
@@ -124,8 +154,10 @@ export default function AdminDemoPage() {
         <button
           onClick={handleFire}
           disabled={loading}
-          className="w-full text-white font-medium py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          style={{ background: 'var(--red-acc)' }}
+          className={`w-full text-white font-medium py-3 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${fireHover && !loading ? 'fire-btn-hover' : ''}`}
+          style={{ background: 'linear-gradient(135deg, #dc2626, #F97316)', boxShadow: fireHover ? '0 8px 24px rgba(220,38,38,0.3)' : 'none', transition: 'box-shadow 0.2s ease' }}
+          onMouseOver={() => setFireHover(true)}
+          onMouseOut={() => setFireHover(false)}
         >
           {loading ? 'Firing...' : 'Fire Trigger'}
         </button>
@@ -133,24 +165,24 @@ export default function AdminDemoPage() {
 
       {result && (
         <div
-          className="rounded-xl p-4"
+          className="risk-slide risk-slide-3 rounded-xl p-4"
           style={
             result.error
-              ? { background: 'rgba(192,57,43,0.06)', border: '1px solid var(--red-acc)' }
-              : { background: 'var(--teal-bg)', border: '1px solid var(--teal)' }
+              ? { background: 'linear-gradient(135deg, rgba(220,38,38,0.08), rgba(236,72,153,0.06))', border: '1px solid #dc2626' }
+              : { background: 'linear-gradient(135deg, rgba(34,197,94,0.08), rgba(20,184,166,0.06))', border: '1px solid #22C55E' }
           }
         >
           {result.error ? (
-            <div style={{ color: 'var(--red-acc)' }}>
+            <div style={{ color: '#dc2626' }}>
               <div className="font-medium">Error</div>
               <div className="text-sm">{result.error}</div>
             </div>
           ) : (
-            <div style={{ color: 'var(--teal)' }}>
+            <div style={{ color: '#22C55E' }}>
               <div className="font-medium">Trigger Fired</div>
               <div className="text-sm">{result.message}</div>
               {result.event_id && (
-                <div className="mono text-xs mt-1" style={{ color: 'var(--teal-d)' }}>Event ID: {result.event_id}</div>
+                <div className="mono text-xs mt-1" style={{ color: '#16a34a' }}>Event ID: {result.event_id}</div>
               )}
             </div>
           )}

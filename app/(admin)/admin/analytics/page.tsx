@@ -91,34 +91,35 @@ export default async function AdminAnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="serif text-2xl font-bold">Analytics</h1>
+      <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A1A', letterSpacing: '-0.03em', fontFamily: "var(--font-inter),'Inter',sans-serif" }}>Analytics</h1>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--rule)' }}>
-        <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--rule)', background: 'var(--cream-d)' }}>
-          <h2 className="font-medium" style={{ color: 'var(--ink)' }}>Per-City Risk (Active Events)</h2>
+      {/* Per-City Risk Table */}
+      <div className="overflow-hidden" style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(6,182,212,0.08))', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
+          <h2 className="font-medium" style={{ color: '#1A1A1A' }}>Per-City Risk (Active Events)</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" style={{ background: '#fff' }}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left" style={{ color: 'var(--ink-60)', borderBottom: '1px solid var(--ink-10)' }}>
+              <tr className="text-left" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(6,182,212,0.06))', color: '#3B82F6', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
                 <th className="px-4 py-3 font-medium">City</th>
                 <th className="px-4 py-3 font-medium">Active Events</th>
                 <th className="px-4 py-3 font-medium">Avg Severity</th>
               </tr>
             </thead>
             <tbody>
-              {cityRiskList.map((cr) => (
-                <tr key={cr.city} className="admin-row" style={{ borderTop: '1px solid var(--ink-10)' }}>
-                  <td className="px-4 py-3 font-medium" style={{ color: 'var(--ink)' }}>{cr.city}</td>
-                  <td className="serif px-4 py-3" style={{ color: 'var(--ink-60)' }}>{cr.events}</td>
-                  <td className="serif px-4 py-3 font-medium" style={{ color: cr.avgSeverity >= 7 ? 'var(--red-acc)' : cr.avgSeverity >= 5 ? 'var(--ink-60)' : 'var(--teal)' }}>
+              {cityRiskList.map((cr, i) => (
+                <tr key={cr.city} className="admin-row" style={{ borderTop: '1px solid #F3F4F6', background: i % 2 === 0 ? '#fff' : 'rgba(59,130,246,0.02)' }}>
+                  <td className="px-4 py-3 font-medium" style={{ color: '#1A1A1A' }}>{cr.city}</td>
+                  <td className="serif px-4 py-3" style={{ color: '#6B7280' }}>{cr.events}</td>
+                  <td className="serif px-4 py-3 font-medium" style={{ color: cr.avgSeverity >= 7 ? '#dc2626' : cr.avgSeverity >= 5 ? '#6B7280' : '#22C55E' }}>
                     {cr.avgSeverity.toFixed(1)}
                   </td>
                 </tr>
               ))}
               {cityRiskList.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center" style={{ color: 'var(--ink-30)' }}>No active events</td>
+                  <td colSpan={3} className="px-4 py-8 text-center" style={{ color: '#9CA3AF' }}>No active events</td>
                 </tr>
               )}
             </tbody>
@@ -126,33 +127,34 @@ export default async function AdminAnalyticsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--rule)' }}>
-        <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--rule)', background: 'var(--cream-d)' }}>
-          <h2 className="font-medium" style={{ color: 'var(--ink)' }}>Claims Trend (by Event + City)</h2>
+      {/* Claims Trend Table */}
+      <div className="overflow-hidden" style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(6,182,212,0.08))', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
+          <h2 className="font-medium" style={{ color: '#1A1A1A' }}>Claims Trend (by Event + City)</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" style={{ background: '#fff' }}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left" style={{ color: 'var(--ink-60)', borderBottom: '1px solid var(--ink-10)' }}>
+              <tr className="text-left" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(6,182,212,0.06))', color: '#3B82F6', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
                 <th className="px-4 py-3 font-medium">Event Type</th>
                 <th className="px-4 py-3 font-medium">City</th>
                 <th className="px-4 py-3 font-medium">Claims</th>
               </tr>
             </thead>
             <tbody>
-              {trends.map((t) => {
+              {trends.map((t, i) => {
                 const triggerLabel = TRIGGERS[t.event_type as DisruptionType]?.label || t.event_type;
                 return (
-                  <tr key={`${t.event_type}-${t.city}`} className="admin-row" style={{ borderTop: '1px solid var(--ink-10)' }}>
-                    <td className="px-4 py-3" style={{ color: 'var(--ink)' }}>{triggerLabel}</td>
-                    <td className="px-4 py-3" style={{ color: 'var(--ink-60)' }}>{t.city}</td>
+                  <tr key={`${t.event_type}-${t.city}`} className="admin-row" style={{ borderTop: '1px solid #F3F4F6', background: i % 2 === 0 ? '#fff' : 'rgba(59,130,246,0.02)' }}>
+                    <td className="px-4 py-3" style={{ color: '#1A1A1A' }}>{triggerLabel}</td>
+                    <td className="px-4 py-3" style={{ color: '#6B7280' }}>{t.city}</td>
                     <td className="serif px-4 py-3 font-medium">{t.count}</td>
                   </tr>
                 );
               })}
               {trends.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center" style={{ color: 'var(--ink-30)' }}>No claims data</td>
+                  <td colSpan={3} className="px-4 py-8 text-center" style={{ color: '#9CA3AF' }}>No claims data</td>
                 </tr>
               )}
             </tbody>
@@ -160,14 +162,15 @@ export default async function AdminAnalyticsPage() {
         </div>
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--rule)' }}>
-        <div className="px-4 py-3" style={{ borderBottom: '1px solid var(--rule)', background: 'var(--cream-d)' }}>
-          <h2 className="font-medium" style={{ color: 'var(--ink)' }}>Recent Premium Recommendations</h2>
+      {/* Premium Recommendations Table */}
+      <div className="overflow-hidden" style={{ borderRadius: 16, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+        <div className="px-4 py-3" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.08), rgba(6,182,212,0.08))', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
+          <h2 className="font-medium" style={{ color: '#1A1A1A' }}>Recent Premium Recommendations</h2>
         </div>
-        <div className="overflow-x-auto">
+        <div className="overflow-x-auto" style={{ background: '#fff' }}>
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-left" style={{ color: 'var(--ink-60)', borderBottom: '1px solid var(--ink-10)' }}>
+              <tr className="text-left" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.06), rgba(6,182,212,0.06))', color: '#3B82F6', borderBottom: '1px solid rgba(59,130,246,0.1)' }}>
                 <th className="px-4 py-3 font-medium">Week</th>
                 <th className="px-4 py-3 font-medium">Base</th>
                 <th className="px-4 py-3 font-medium">Weather</th>
@@ -177,21 +180,21 @@ export default async function AdminAnalyticsPage() {
               </tr>
             </thead>
             <tbody>
-              {recommendations.map((rec) => (
-                <tr key={rec.id} className="admin-row" style={{ borderTop: '1px solid var(--ink-10)' }}>
-                  <td className="mono px-4 py-3" style={{ color: 'var(--ink)' }}>{rec.week_start_date}</td>
-                  <td className="serif px-4 py-3" style={{ color: 'var(--ink-60)' }}>₹{Number(rec.base_premium)}</td>
-                  <td className="serif px-4 py-3" style={{ color: 'var(--ink-60)' }}>₹{Number(rec.weather_risk)}</td>
-                  <td className="serif px-4 py-3" style={{ color: 'var(--ink-60)' }}>₹{Number(rec.ubi_adjustment)}</td>
-                  <td className="serif px-4 py-3 font-medium" style={{ color: 'var(--ink)' }}>₹{Number(rec.final_premium)}</td>
-                  <td className="px-4 py-3 text-xs max-w-[300px] truncate" style={{ color: 'var(--ink-60)' }}>
+              {recommendations.map((rec, i) => (
+                <tr key={rec.id} className="admin-row" style={{ borderTop: '1px solid #F3F4F6', background: i % 2 === 0 ? '#fff' : 'rgba(59,130,246,0.02)' }}>
+                  <td className="mono px-4 py-3" style={{ color: '#1A1A1A' }}>{rec.week_start_date}</td>
+                  <td className="serif px-4 py-3" style={{ color: '#6B7280' }}>&#x20B9;{Number(rec.base_premium)}</td>
+                  <td className="serif px-4 py-3" style={{ color: '#6B7280' }}>&#x20B9;{Number(rec.weather_risk)}</td>
+                  <td className="serif px-4 py-3" style={{ color: '#6B7280' }}>&#x20B9;{Number(rec.ubi_adjustment)}</td>
+                  <td className="serif px-4 py-3 font-medium" style={{ color: '#1A1A1A' }}>&#x20B9;{Number(rec.final_premium)}</td>
+                  <td className="px-4 py-3 text-xs max-w-[300px] truncate" style={{ color: '#6B7280' }}>
                     {rec.reasoning || '-'}
                   </td>
                 </tr>
               ))}
               {recommendations.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-8 text-center" style={{ color: 'var(--ink-30)' }}>No recommendations yet</td>
+                  <td colSpan={6} className="px-4 py-8 text-center" style={{ color: '#9CA3AF' }}>No recommendations yet</td>
                 </tr>
               )}
             </tbody>

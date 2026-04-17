@@ -3,7 +3,7 @@
 // Sources: NewsData.io + OpenRouter LLM classification
 // ============================================================================
 
-import { searchDisruptionNews } from '@/lib/clients/newsdata';
+import { searchCityDisruptionNews } from '@/lib/clients/newsdata';
 import { classifyDisruptionNews } from '@/lib/clients/openrouter';
 import { TRIGGERS } from '@/lib/config/constants';
 import type { TriggerCandidate } from '../types';
@@ -15,8 +15,8 @@ export async function checkCurfewBandhTrigger(
   lat: number,
   lng: number
 ): Promise<TriggerCandidate | null> {
-  // Fetch recent disruption-related news
-  const articles = await searchDisruptionNews();
+  // Fetch recent disruption-related news for this city
+  const articles = await searchCityDisruptionNews(city);
   if (articles.length === 0) return null;
 
   // Classify each article with LLM

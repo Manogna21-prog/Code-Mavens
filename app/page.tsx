@@ -1221,7 +1221,7 @@ export default function LandingPage() {
 
               {/* Video link */}
               <a
-                href="https://drive.google.com/file/d/1q6mw7LurgFKOiukUnZhVu7krQ9sDTXAm/view?usp=sharing"
+                href="https://drive.google.com/file/d/1JUs3iJCZ427nV3vC9ayDoj2m398zKgAn/view?usp=sharing"
                 target="_blank" rel="noopener noreferrer"
                 className="ss-watch-link"
                 style={{
@@ -1259,7 +1259,7 @@ export default function LandingPage() {
                   <p style={{
                     fontSize:20, fontWeight:700, color:C.orange,
                     fontFamily:"var(--font-inter),'Inter',sans-serif",
-                  }}>Rajan Kumar</p>
+                  }}>Balaji</p>
                 </div>
               </div>
 
