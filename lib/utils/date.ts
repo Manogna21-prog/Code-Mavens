@@ -72,3 +72,38 @@ export function getNextMonday(date?: Date): Date {
   nextMonday.setHours(0, 0, 0, 0);
   return nextMonday;
 }
+
+/**
+ * Check if current time is within Sunday payment window (6:00 AM - 11:59 PM IST)
+ */
+export function isSundayPaymentWindow(): boolean {
+  const ist = nowIST();
+  const day = ist.getDay(); // 0 = Sunday
+  if (day !== 0) return false;
+  const hour = ist.getHours();
+  return hour >= 6; // 6 AM to 11:59 PM
+}
+
+/**
+ * Get the next Sunday date (for showing renewal window date)
+ */
+export function getNextSunday(date?: Date): Date {
+  const d = date ? new Date(date) : nowIST();
+  const day = d.getDay();
+  const daysUntilSunday = day === 0 ? 7 : 7 - day;
+  const nextSun = new Date(d);
+  nextSun.setDate(d.getDate() + daysUntilSunday);
+  nextSun.setHours(6, 0, 0, 0);
+  return nextSun;
+}
+
+/**
+ * Get the Sunday end of next week (for next week's policy end date)
+ */
+export function getNextWeekEnd(date?: Date): Date {
+  const nextMon = getNextMonday(date);
+  const sun = new Date(nextMon);
+  sun.setDate(nextMon.getDate() + 6);
+  sun.setHours(23, 59, 59, 999);
+  return sun;
+}

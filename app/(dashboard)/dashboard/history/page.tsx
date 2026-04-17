@@ -97,14 +97,14 @@ function monthKey(iso: string): string {
 }
 
 function scoreLabel(score: number): { text: string; color: string } {
-  if (score >= 80) return { text: 'Excellent', color: 'var(--teal)' };
-  if (score >= 60) return { text: 'Good', color: 'var(--teal)' };
-  if (score >= 40) return { text: 'Fair', color: '#f59e0b' };
+  if (score >= 80) return { text: 'Excellent', color: '#F07820' };
+  if (score >= 60) return { text: 'Good', color: '#F07820' };
+  if (score >= 40) return { text: 'Fair', color: '#F07820' };
   return { text: 'Needs Attention', color: 'var(--red-acc)' };
 }
 
 function claimStatusColor(status: string): string {
-  if (status === 'paid' || status === 'approved' || status === 'gate2_passed') return 'var(--teal)';
+  if (status === 'paid' || status === 'approved' || status === 'gate2_passed') return '#F07820';
   if (status === 'rejected') return 'var(--red-acc)';
   return 'var(--ink-60)';
 }
@@ -250,12 +250,10 @@ function PaymentLedger({
   entries,
   formatDate: fmtDate,
   formatINR: fmtINR,
-  t,
 }: {
   entries: LedgerEntry[];
   formatDate: (d: string) => string;
   formatINR: (n: number) => string;
-  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   const [ledgerFilter, setLedgerFilter] = useState<'all' | 'premium' | 'payout'>('all');
   const [expanded, setExpanded] = useState(false);
@@ -272,13 +270,13 @@ function PaymentLedger({
       {/* Header + sub-tabs */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
-          {t('history.paymentLedger')}
+          Payment Ledger
         </p>
         <div style={{ display: 'flex', gap: 4, background: 'var(--ink-10)', borderRadius: 8, padding: 2 }}>
           {([
-            { key: 'all' as const, label: `${t('history.all')} (${entries.length})` },
-            { key: 'payout' as const, label: `${t('history.payouts')} (${payoutCount})` },
-            { key: 'premium' as const, label: `${t('history.premiums')} (${premiumCount})` },
+            { key: 'all' as const, label: `All (${entries.length})` },
+            { key: 'payout' as const, label: `Payouts (${payoutCount})` },
+            { key: 'premium' as const, label: `Premiums (${premiumCount})` },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -293,7 +291,7 @@ function PaymentLedger({
                 cursor: 'pointer',
                 letterSpacing: '0.04em',
                 transition: 'all 0.15s ease',
-                background: ledgerFilter === tab.key ? 'var(--teal)' : 'transparent',
+                background: ledgerFilter === tab.key ? '#F07820' : 'transparent',
                 color: ledgerFilter === tab.key ? '#fff' : 'var(--ink-60)',
               }}
             >
@@ -305,13 +303,13 @@ function PaymentLedger({
 
       {filtered.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
-          <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)' }}>{t('history.noTransactions')}</p>
+          <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)' }}>No transactions</p>
         </div>
       ) : (
         <>
           {visible.map((entry) => {
             const isPremium = entry.type === 'premium';
-            const amtColor = isPremium ? 'var(--red-acc)' : 'var(--teal)';
+            const amtColor = isPremium ? 'var(--red-acc)' : '#F07820';
             const sign = isPremium ? '-' : '+';
             return (
               <div
@@ -330,11 +328,11 @@ function PaymentLedger({
                       className="mono"
                       style={{
                         fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
-                        background: isPremium ? 'rgba(239,68,68,0.1)' : 'rgba(20,184,166,0.1)',
+                        background: isPremium ? 'rgba(239,68,68,0.1)' : 'rgba(240,120,32,0.1)',
                         color: amtColor, textTransform: 'uppercase', letterSpacing: '0.06em',
                       }}
                     >
-                      {isPremium ? t('history.tagPremium') : t('history.tagPayout')}
+                      {isPremium ? 'PREMIUM' : 'PAYOUT'}
                     </span>
                     <span className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
                       {entry.ref}
@@ -350,7 +348,7 @@ function PaymentLedger({
                   </p>
                   <p className="mono" style={{
                     fontSize: 9,
-                    color: ['completed', 'paid', 'demo'].includes(entry.status) ? 'var(--teal)' : entry.status === 'failed' ? 'var(--red-acc)' : 'var(--ink-60)',
+                    color: ['completed', 'paid', 'demo'].includes(entry.status) ? '#F07820' : entry.status === 'failed' ? 'var(--red-acc)' : 'var(--ink-60)',
                     textTransform: 'uppercase', letterSpacing: '0.06em',
                   }}>
                     {entry.status}
@@ -368,11 +366,11 @@ function PaymentLedger({
               style={{
                 width: '100%', padding: '10px 0', marginTop: 4,
                 background: 'none', border: 'none', cursor: 'pointer',
-                fontSize: 11, fontWeight: 600, color: 'var(--teal)',
+                fontSize: 11, fontWeight: 600, color: '#F07820',
                 letterSpacing: '0.04em', transition: 'color 0.15s ease',
               }}
             >
-              {expanded ? `${t('history.showLess')} \u25B2` : `${t('history.showAll', { n: filtered.length })} \u25BC`}
+              {expanded ? `Show less \u25B2` : `Show all ${filtered.length} transactions \u25BC`}
             </button>
           )}
         </>
@@ -650,10 +648,10 @@ export default function HistoryPage() {
     return (
       <div style={{ padding: '60px 16px', textAlign: 'center' }}>
         <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
-          {t('history.error')}
+          Something went wrong
         </p>
         <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
-          {t('history.errorDesc')}
+          Could not load history data. Pull down to refresh.
         </p>
       </div>
     );
@@ -677,10 +675,10 @@ export default function HistoryPage() {
           className="serif"
           style={{ fontSize: 22, fontWeight: 900, color: 'var(--ink)', letterSpacing: '-0.03em' }}
         >
-          {t('history.title')}
+          Analytics &amp; History
         </h1>
         <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 2 }}>
-          {t('history.subtitle')}
+          Your protection journey at a glance
         </p>
       </div>
 
@@ -707,7 +705,7 @@ export default function HistoryPage() {
                 fontWeight: 700,
                 letterSpacing: '0.06em',
                 textTransform: 'uppercase',
-                background: activeTab === tab ? 'var(--teal)' : 'transparent',
+                background: activeTab === tab ? '#F07820' : 'transparent',
                 border: 'none',
                 borderRadius: 8,
                 color: activeTab === tab ? '#fff' : 'var(--ink-60)',
@@ -717,7 +715,7 @@ export default function HistoryPage() {
                 transition: 'all 0.2s ease',
               }}
             >
-              {tab === 'analytics' ? t('history.tabAnalytics') : t('history.tabTransactions')}
+              {tab}
             </button>
           ))}
         </div>
@@ -737,7 +735,7 @@ export default function HistoryPage() {
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p className="mono" style={{ fontSize: 9, color: 'var(--red-acc)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {t('history.premiumsPaid')}
+                  Premiums Paid
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
@@ -761,22 +759,22 @@ export default function HistoryPage() {
             {/* Payouts Received */}
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <p className="mono" style={{ fontSize: 9, color: 'var(--teal)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {t('history.payoutsReceived')}
+                <p className="mono" style={{ fontSize: 9, color: '#F07820', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                  Payouts Received
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
-                  background: 'rgba(13,148,136,0.08)', textAlign: 'center', lineHeight: '20px', fontSize: 11,
-                  color: 'var(--teal)',
+                  background: 'rgba(240,120,32,0.08)', textAlign: 'center', lineHeight: '20px', fontSize: 11,
+                  color: '#F07820',
                 }}>{'\u2193'}</span>
               </div>
-              <p className="serif" style={{ fontSize: 22, fontWeight: 900, color: 'var(--teal)', letterSpacing: '-0.03em', marginTop: 4 }}>
+              <p className="serif" style={{ fontSize: 22, fontWeight: 900, color: '#F07820', letterSpacing: '-0.03em', marginTop: 4 }}>
                 {formatINR(analytics.totalPayouts)}
               </p>
-              <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'rgba(13,148,136,0.1)', overflow: 'hidden' }}>
+              <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'rgba(240,120,32,0.1)', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', borderRadius: 2,
-                  background: 'var(--teal)',
+                  background: '#F07820',
                   width: analytics.totalPayouts > 0 ? `${Math.min(100, (analytics.totalPayouts / Math.max(analytics.totalPremiums, analytics.totalPayouts)) * 100)}%` : '0%',
                 }} />
               </div>
@@ -786,24 +784,24 @@ export default function HistoryPage() {
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p className="mono" style={{ fontSize: 9, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {t('history.netSavings')}
+                  Net Savings
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
-                  background: analytics.netSavings >= 0 ? 'rgba(13,148,136,0.08)' : 'rgba(192,57,43,0.08)',
+                  background: analytics.netSavings >= 0 ? 'rgba(240,120,32,0.08)' : 'rgba(192,57,43,0.08)',
                   textAlign: 'center', lineHeight: '20px', fontSize: 11,
-                  color: analytics.netSavings >= 0 ? 'var(--teal)' : 'var(--red-acc)',
+                  color: analytics.netSavings >= 0 ? '#F07820' : 'var(--red-acc)',
                 }}>{analytics.netSavings >= 0 ? '\u2191' : '\u2193'}</span>
               </div>
               <p className="serif" style={{
                 fontSize: 22, fontWeight: 900, letterSpacing: '-0.03em', marginTop: 4,
-                color: analytics.netSavings >= 0 ? 'var(--teal)' : 'var(--red-acc)',
+                color: analytics.netSavings >= 0 ? '#F07820' : 'var(--red-acc)',
               }}>
                 {analytics.netSavings >= 0 ? '+' : ''}{formatINR(analytics.netSavings)}
               </p>
               {analytics.totalPremiums > 0 && (
                 <p className="sans" style={{ fontSize: 10, color: 'var(--ink-30)', marginTop: 6, fontStyle: 'italic' }}>
-                  {t('history.paidBack', { n: analytics.roiMultiplier.toFixed(2) })}
+                  {'\u20B9'}1 paid {'\u2192'} {'\u20B9'}{analytics.roiMultiplier.toFixed(2)} back
                 </p>
               )}
             </div>
@@ -812,18 +810,18 @@ export default function HistoryPage() {
             <div style={{ ...CARD, padding: '14px 14px 12px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <p className="mono" style={{ fontSize: 9, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  {t('history.returnRoi')}
+                  Return (ROI)
                 </p>
                 <span style={{
                   display: 'inline-block', width: 20, height: 20, borderRadius: 6,
-                  background: analytics.roi >= 100 ? 'rgba(13,148,136,0.08)' : 'rgba(17,16,16,0.05)',
+                  background: analytics.roi >= 100 ? 'rgba(240,120,32,0.08)' : 'rgba(17,16,16,0.05)',
                   textAlign: 'center', lineHeight: '20px', fontSize: 11,
-                  color: analytics.roi >= 100 ? 'var(--teal)' : 'var(--ink-60)',
+                  color: analytics.roi >= 100 ? '#F07820' : 'var(--ink-60)',
                 }}>%</span>
               </div>
               <p className="serif" style={{
                 fontSize: 28, fontWeight: 900, letterSpacing: '-0.03em', marginTop: 4,
-                color: analytics.roi >= 100 ? 'var(--teal)' : 'var(--ink)',
+                color: analytics.roi >= 100 ? '#F07820' : 'var(--ink)',
               }}>
                 {analytics.roi.toFixed(0)}%
               </p>
@@ -831,7 +829,7 @@ export default function HistoryPage() {
               <div style={{ marginTop: 8, height: 4, borderRadius: 2, background: 'var(--ink-10)', overflow: 'hidden' }}>
                 <div style={{
                   height: '100%', borderRadius: 2,
-                  background: analytics.roi >= 100 ? 'var(--teal)' : 'var(--ink-30)',
+                  background: analytics.roi >= 100 ? '#F07820' : 'var(--ink-30)',
                   width: `${Math.min(100, analytics.roi)}%`,
                 }} />
               </div>
@@ -843,12 +841,12 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           <div style={{ ...CARD, marginTop: 16, padding: '18px 16px 14px' }}>
             <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>
-              {t('history.premiumsVsPayouts')}
+              Premiums vs Payouts
             </p>
 
             {analytics.monthlyBars.length === 0 ? (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '20px 0' }}>
-                {t('history.noDataYet')}
+                No data yet
               </p>
             ) : (
               <>
@@ -856,11 +854,11 @@ export default function HistoryPage() {
                 <div style={{ display: 'flex', gap: 16, marginBottom: 14 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                     <div style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(192,57,43,0.7)' }} />
-                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>{t('history.legendPremium')}</span>
+                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>Premium</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <div style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(13,148,136,0.7)' }} />
-                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>{t('history.legendPayout')}</span>
+                    <div style={{ width: 10, height: 10, borderRadius: 2, background: 'rgba(240,120,32,0.7)' }} />
+                    <span className="mono" style={{ fontSize: 9, color: 'var(--ink-60)' }}>Payout</span>
                   </div>
                 </div>
 
@@ -878,7 +876,7 @@ export default function HistoryPage() {
                           </span>
                         </div>
                         <div style={{ display: 'flex', gap: 2, marginBottom: 4 }}>
-                          <span className="mono" style={{ fontSize: 8, color: 'var(--teal)' }}>
+                          <span className="mono" style={{ fontSize: 8, color: '#F07820' }}>
                             {m.payouts > 0 ? formatINR(m.payouts) : ''}
                           </span>
                         </div>
@@ -897,7 +895,7 @@ export default function HistoryPage() {
                             style={{
                               width: 18,
                               height: Math.max(2, payH),
-                              background: 'rgba(13,148,136,0.7)',
+                              background: 'rgba(240,120,32,0.7)',
                               borderRadius: '4px 4px 0 0',
                               transition: 'height 0.4s ease',
                             }}
@@ -923,18 +921,18 @@ export default function HistoryPage() {
               className="mono"
               style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}
             >
-              {t('history.protectionScore')}
+              Protection Score
             </p>
 
             <ProtectionGauge score={analytics.protectionScore} />
 
             <p className="sans" style={{ fontSize: 12, color: 'var(--ink-60)', marginTop: 12, lineHeight: 1.5 }}>
               {analytics.streak > 0
-                ? t('history.consistentCoverage', { n: analytics.streak })
-                : t('history.activatePlan')}
+                ? `Consistent coverage, zero gaps in ${analytics.streak} week${analytics.streak !== 1 ? 's' : ''}`
+                : 'Activate a weekly plan to start building your score'}
             </p>
-            <p className="mono" style={{ fontSize: 10, color: 'var(--teal)', marginTop: 4 }}>
-              {t('history.topZone', { n: Math.max(5, 100 - analytics.protectionScore) })}
+            <p className="mono" style={{ fontSize: 10, color: '#F07820', marginTop: 4 }}>
+              Top {Math.max(5, 100 - analytics.protectionScore)}% in your zone
             </p>
           </div>
 
@@ -943,12 +941,12 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           <div style={{ ...CARD, marginTop: 16, padding: '18px 16px 14px' }}>
             <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 14 }}>
-              {t('history.weeklyEarnings')}
+              Weekly Earnings
             </p>
 
             {analytics.weekBuckets.every((w) => w.amount === 0) ? (
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-30)', textAlign: 'center', padding: '20px 0' }}>
-                {t('history.noPayouts8Weeks')}
+                No payouts in the last 8 weeks
               </p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -963,12 +961,12 @@ export default function HistoryPage() {
                         <div style={{
                           height: '100%',
                           width: `${Math.max(w.amount > 0 ? 2 : 0, pct)}%`,
-                          background: 'linear-gradient(90deg, var(--teal) 0%, var(--teal-d) 100%)',
+                          background: 'linear-gradient(90deg, #F07820 0%, #D96A10 100%)',
                           borderRadius: 4,
                           transition: 'width 0.4s ease',
                         }} />
                       </div>
-                      <span className="serif" style={{ fontSize: 11, fontWeight: 700, color: w.amount > 0 ? 'var(--teal)' : 'var(--ink-30)', minWidth: 52, textAlign: 'right' }}>
+                      <span className="serif" style={{ fontSize: 11, fontWeight: 700, color: w.amount > 0 ? '#F07820' : 'var(--ink-30)', minWidth: 52, textAlign: 'right' }}>
                         {w.amount > 0 ? formatINR(w.amount) : '--'}
                       </span>
                     </div>
@@ -991,14 +989,14 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           <div style={{ ...CARD, marginTop: 16, padding: '18px 16px 14px' }}>
             <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>
-              {t('history.payoutTimeline')}
+              Payout Timeline
             </p>
 
             {claims.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <p className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>{t('history.noDisruptions')}</p>
+                <p className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>No disruptions recorded yet</p>
                 <p className="sans" style={{ fontSize: 12, color: 'var(--ink-30)', marginTop: 4 }}>
-                  {t('history.noDisruptionsDesc')}
+                  When weather or other disruptions affect your zone, they will appear here.
                 </p>
               </div>
             ) : (
@@ -1035,7 +1033,7 @@ export default function HistoryPage() {
                         const isPaid = claim.status === 'paid' || claim.status === 'approved';
                         const isRejected = claim.status === 'rejected';
                         const isPending = !isPaid && !isRejected;
-                        const dotColor = isPaid ? 'var(--teal)' : isPending ? '#f59e0b' : 'var(--red-acc)';
+                        const dotColor = isPaid ? '#F07820' : isPending ? '#F07820' : 'var(--red-acc)';
 
                         // Find matching payout for UPI ref
                         const matchingPayout = payouts.find((p) => p.claim_id === claim.id);
@@ -1094,7 +1092,7 @@ export default function HistoryPage() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <p className="serif" style={{
                                     fontSize: 18, fontWeight: 900,
-                                    color: isPaid ? 'var(--teal)' : isRejected ? 'var(--red-acc)' : 'var(--ink)',
+                                    color: isPaid ? '#F07820' : isRejected ? 'var(--red-acc)' : 'var(--ink)',
                                   }}>
                                     {formatINR(claim.payout_amount_inr)}
                                   </p>
@@ -1102,11 +1100,11 @@ export default function HistoryPage() {
                                   <div style={{ display: 'flex', gap: 4 }}>
                                     <span style={{
                                       width: 6, height: 6, borderRadius: '50%',
-                                      background: claim.gate1_passed ? 'var(--teal)' : 'var(--ink-10)',
+                                      background: claim.gate1_passed ? '#F07820' : 'var(--ink-10)',
                                     }} title="Gate 1" />
                                     <span style={{
                                       width: 6, height: 6, borderRadius: '50%',
-                                      background: claim.gate2_passed ? 'var(--teal)' : 'var(--ink-10)',
+                                      background: claim.gate2_passed ? '#F07820' : 'var(--ink-10)',
                                     }} title="Gate 2" />
                                   </div>
                                 </div>
@@ -1130,7 +1128,7 @@ export default function HistoryPage() {
           {/* ---------------------------------------------------------------- */}
           {/* Payment Ledger — with sub-tabs and collapsible                    */}
           {/* ---------------------------------------------------------------- */}
-          <PaymentLedger entries={analytics.ledger} formatDate={formatDate} formatINR={formatINR} t={t} />
+          <PaymentLedger entries={analytics.ledger} formatDate={formatDate} formatINR={formatINR} />
         </div>
       )}
     </div>

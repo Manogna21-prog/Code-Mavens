@@ -13,7 +13,7 @@ import random
 from zones import CITY_ZONES
 
 
-def get_driver_zones(city: str, driver_id: str | None = None) -> dict:
+def get_driver_zones(city: str, driver_id=None) -> dict:
     """
     Mock Porter API: Returns zones the driver frequently operates in.
 

@@ -30,22 +30,30 @@ export default async function WalletPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [walletRes, coinRes, payoutsRes, profileRes] = await Promise.all([
-    supabase.from('driver_wallet').select('*').eq('driver_id', user.id).single(),
-    supabase.from('driver_coin_balance').select('*').eq('profile_id', user.id).single(),
-    supabase.from('payout_ledger')
-      .select('id, amount_inr, status, mock_upi_ref, completed_at, created_at')
-      .eq('profile_id', user.id)
-      .order('created_at', { ascending: false })
-      .limit(20),
-    supabase.from('profiles').select('language').eq('id', user.id).single(),
-  ]);
+  const { data: walletData } = await supabase
+    .from('driver_wallet')
+    .select('*')
+    .eq('driver_id', user.id)
+    .single();
 
-  const wallet = walletRes.data as unknown as WalletRow | null;
-  const coins = coinRes.data as unknown as CoinBalanceRow | null;
-  const payouts = (payoutsRes.data as unknown as PayoutRow[]) || [];
-  const lang = (profileRes.data as unknown as { language: string } | null)?.language || 'en';
-  const t = getTranslator(lang);
+  const wallet = walletData as unknown as WalletRow | null;
+
+  const { data: coinData } = await supabase
+    .from('driver_coin_balance')
+    .select('*')
+    .eq('profile_id', user.id)
+    .single();
+
+  const coins = coinData as unknown as CoinBalanceRow | null;
+
+  const { data: payoutsData } = await supabase
+    .from('payout_ledger')
+    .select('id, amount_inr, status, mock_upi_ref, completed_at, created_at')
+    .eq('profile_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(20);
+
+  const payouts = (payoutsData as unknown as PayoutRow[]) || [];
 
   return (
     <div className="p-4 space-y-4">
@@ -55,12 +63,18 @@ export default async function WalletPage() {
         <div className="rounded-xl p-4" style={{ background: 'var(--teal-bg)', border: '1px solid var(--teal)' }}>
           <div className="mono text-xs" style={{ color: 'var(--teal)' }}>{t('wallet.totalEarned')}</div>
           <div className="serif text-2xl font-bold" style={{ color: 'var(--teal-d)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'rgba(240,120,32,0.08)', border: '1px solid #F07820' }}>
+          <div className="mono text-xs" style={{ color: '#F07820' }}>Total Earned</div>
+          <div className="serif text-2xl font-bold" style={{ color: '#D96A10' }}>
             ₹{Number(wallet?.total_earned_inr || 0).toLocaleString()}
           </div>
         </div>
         <div className="rounded-xl p-4" style={{ background: 'var(--teal-bg)', border: '1px solid var(--teal)' }}>
           <div className="mono text-xs" style={{ color: 'var(--teal)' }}>{t('wallet.thisWeek')}</div>
           <div className="serif text-2xl font-bold" style={{ color: 'var(--teal-d)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'rgba(240,120,32,0.08)', border: '1px solid #F07820' }}>
+          <div className="mono text-xs" style={{ color: '#F07820' }}>This Week</div>
+          <div className="serif text-2xl font-bold" style={{ color: '#D96A10' }}>
             ₹{Number(wallet?.this_week_earned_inr || 0).toLocaleString()}
           </div>
         </div>
@@ -95,7 +109,7 @@ export default async function WalletPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="mono text-xs font-medium" style={{ color: payout.status === 'completed' ? 'var(--teal)' : payout.status === 'failed' ? 'var(--red-acc)' : 'var(--ink-60)' }}>
+                    <div className="mono text-xs font-medium" style={{ color: payout.status === 'completed' ? '#F07820' : payout.status === 'failed' ? 'var(--red-acc)' : 'var(--ink-60)' }}>
                       {payout.status}
                     </div>
                     <div className="mono text-xs" style={{ color: 'var(--ink-30)' }}>{date}</div>

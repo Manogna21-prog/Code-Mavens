@@ -41,11 +41,11 @@ const CITY_NAMES: Record<string, string> = {
 
 const F = "var(--font-inter),'Inter',sans-serif";
 
-function tierLabelKey(score: number): string {
-  if (score >= 0.8) return 'profile.expert';
-  if (score >= 0.6) return 'profile.reliable';
-  if (score >= 0.4) return 'profile.growing';
-  return 'profile.new';
+function tierLabel(score: number): string {
+  if (score >= 0.8) return 'Expert';
+  if (score >= 0.6) return 'Reliable';
+  if (score >= 0.4) return 'Growing';
+  return 'New';
 }
 
 // ─── Sign Out Button ──────────────────────────────────────────────────────────
@@ -76,7 +76,7 @@ function SignOutButton({ label, loadingLabel }: { label: string; loadingLabel: s
         opacity: loading ? 0.6 : 1, fontFamily: F,
       }}
     >
-      {loading ? loadingLabel : label}
+      {loading ? 'Signing out…' : 'Sign Out'}
     </button>
   );
 }
@@ -89,7 +89,7 @@ function DarkToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       onClick={onToggle}
       style={{
         width: 48, height: 28, borderRadius: 14,
-        background: on ? '#0D9488' : '#E5E7EB',
+        background: on ? '#F07820' : '#E5E7EB',
         position: 'relative', cursor: 'pointer',
         transition: 'background 0.2s ease', flexShrink: 0,
       }}
@@ -221,7 +221,7 @@ export default function ProfilePage() {
   const currentLangLabel = LANGUAGES.find(l => l.code === profile.language)?.label || 'English';
   const cityFull   = CITY_NAMES[profile.city || ''] || (profile.city || 'City');
   const initial    = (profile.full_name || 'D')[0].toUpperCase();
-  const tier       = t(tierLabelKey(profile.trust_score));
+  const tier       = tierLabel(profile.trust_score);
   const pts        = Math.round(profile.trust_score * 2000 + stats.policies * 100);
   const zoneCode   = `${(profile.city || 'XX').slice(0, 3).toUpperCase()}-01, ${cityFull}`;
   const memberSince = new Date(profile.member_since)
@@ -230,17 +230,17 @@ export default function ProfilePage() {
   const ACHIEVEMENTS = [
     { emoji: '🛡️', bg: '#F0EDEB', label: `${stats.policies} Policies` },
     { emoji: '🔥', bg: '#FEF9E7', label: `${stats.streak}w Streak`    },
-    { emoji: '💰', bg: '#ECFDF5', label: `${stats.claims} Claims`     },
-    { emoji: '👥', bg: '#EDE9FE', label: '3 Referrals'                },
+    { emoji: '💰', bg: '#FEF3E8', label: `${stats.claims} Claims`     },
+    { emoji: '👥', bg: '#FEF3E8', label: '3 Referrals'                },
   ];
 
   const DETAILS = [
-    { label: t('profile.mobile'),      value: profile.phone_number || '—' },
-    { label: t('profile.platform'),    value: 'Porter'                     },
-    { label: t('profile.zone'),        value: zoneCode                     },
-    { label: t('profile.shift'),       value: t('profile.fullDay')         },
-    { label: t('profile.memberSince'), value: memberSince                  },
-    { label: t('profile.upi'),         value: profile.upi_id || '—'       },
+    { label: 'Mobile',       value: profile.phone_number || '—' },
+    { label: 'Platform',     value: 'Porter'                     },
+    { label: 'Zone',         value: zoneCode                     },
+    { label: 'Shift',        value: 'Full Day (10 hrs)'          },
+    { label: 'Member Since', value: memberSince                  },
+    { label: 'UPI',          value: profile.upi_id || '—'       },
   ];
 
   return (
@@ -249,7 +249,7 @@ export default function ProfilePage() {
 
         {/* ══ Screen Title ══ */}
         <h1 style={{ fontSize: 28, fontWeight: 800, color: '#1A1A1A', margin: 0, letterSpacing: '-0.03em', fontFamily: F }}>
-          {t('profile.title')}
+          Profile
         </h1>
 
         {/* ══ 1. Profile Header Card ══ */}
@@ -273,7 +273,7 @@ export default function ProfilePage() {
 
           {/* Subtitle */}
           <p style={{ fontSize: 14, color: '#6B7280', margin: '4px 0 0', textAlign: 'center', fontFamily: F }}>
-            {t('profile.porterPartner')} · {cityFull}
+            Porter Partner · {cityFull}
           </p>
 
           {/* Tier badge */}
@@ -288,9 +288,9 @@ export default function ProfilePage() {
         {/* ══ 2. Quick Stats Row ══ */}
         <div style={{ display: 'flex', gap: 12 }}>
           {([
-            { value: String(stats.policies), color: '#F07820', label: t('profile.policies') },
-            { value: String(stats.claims),   color: '#16A34A', label: t('profile.claims')   },
-            { value: `${stats.streak}w`,     color: '#F07820', label: t('profile.streak')   },
+            { value: String(stats.policies), color: '#F07820', label: 'Policies' },
+            { value: String(stats.claims),   color: '#F07820', label: 'Claims'   },
+            { value: `${stats.streak}w`,     color: '#F07820', label: 'Streak'   },
           ] as const).map(({ value, color, label }) => (
             <div key={label} style={{
               flex: 1, background: '#fff', border: '1px solid #E8E8EA',
@@ -306,7 +306,7 @@ export default function ProfilePage() {
         {/* ══ 3. Achievements Card ══ */}
         <div style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16, padding: 20 }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>
-            {t('profile.achievements')}
+            Achievements
           </p>
 
           <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
@@ -355,9 +355,9 @@ export default function ProfilePage() {
               <Sun size={22} color="#F59E0B" strokeWidth={2} />
             </div>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', margin: 0, fontFamily: F }}>{t('profile.darkMode')}</p>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', margin: 0, fontFamily: F }}>Dark Mode</p>
               <p style={{ fontSize: 13, color: '#9CA3AF', margin: '2px 0 0', fontFamily: F }}>
-                {darkMode ? t('profile.darkActive') : t('profile.lightActive')}
+                {darkMode ? 'Dark theme active' : 'Light theme active'}
               </p>
             </div>
             <DarkToggle on={darkMode} onToggle={() => setDarkMode(!darkMode)} />
@@ -367,12 +367,12 @@ export default function ProfilePage() {
         {/* ══ 6. Settings Menu Card ══ */}
         {(() => {
           const MENU_ROWS = [
-            { Icon: Bell,        label: t('profile.notifications'),  action: () => {} },
-            { Icon: CreditCard,  label: t('profile.paymentMethods'), action: () => {} },
-            { Icon: Globe,       label: `${t('profile.language')} · ${currentLangLabel}`, action: () => setLangOpen(!langOpen) },
-            { Icon: Headphones,  label: t('profile.helpSupport'),    action: () => {} },
-            { Icon: Phone,       label: t('profile.emergencyContact'), action: () => {} },
-            { Icon: Download,    label: t('profile.downloadData'),   action: () => {} },
+            { Icon: Bell,        label: 'Notification Settings', action: () => {} },
+            { Icon: CreditCard,  label: 'Payment Methods',       action: () => {} },
+            { Icon: Globe,       label: `Language · ${currentLangLabel}`, action: () => setLangOpen(!langOpen) },
+            { Icon: Headphones,  label: 'Help & Support',        action: () => {} },
+            { Icon: Phone,       label: 'Emergency Contact',     action: () => {} },
+            { Icon: Download,    label: 'Download My Data',      action: () => {} },
           ];
           return (
             <div style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16, overflow: 'hidden' }}>
