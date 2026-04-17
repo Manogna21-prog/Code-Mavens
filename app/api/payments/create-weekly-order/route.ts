@@ -116,19 +116,12 @@ export async function POST(request: Request) {
     // Amount in paise (Razorpay uses smallest currency unit)
     const amountPaise = Math.round(premiumBreakdown.total * 100);
 
-    // Create Razorpay order
-    const razorpay = getRazorpayClient();
-    const order = await razorpay.orders.create({
+    // Mock Razorpay order (no real API call needed)
+    const order = {
+      id: `order_mock_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
       amount: amountPaise,
       currency: 'INR',
-      receipt: `rn_${profileId.slice(0, 8)}_${Date.now().toString(36)}`,
-      notes: {
-        profile_id: profileId,
-        plan_id: plan.id,
-        plan_slug: body.plan_slug,
-        type: 'weekly_renewal',
-      },
-    });
+    };
 
     // Insert payment_transaction record
     const { error: txError } = await supabase

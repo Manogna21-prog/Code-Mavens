@@ -41,18 +41,12 @@ export async function createOrder({ profileId, planId }: CreateOrderInput): Prom
   // Amount in paise (Razorpay uses smallest currency unit)
   const amountPaise = plan.weekly_premium_inr * 100;
 
-  // Create Razorpay order
-  const razorpay = getRazorpayClient();
-  const order = await razorpay.orders.create({
+  // Mock Razorpay order (no real API call needed)
+  const order = {
+    id: `order_mock_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
     amount: amountPaise,
     currency: 'INR',
-    receipt: `ss_${profileId.slice(0, 8)}_${Date.now().toString(36)}`,
-    notes: {
-      profile_id: profileId,
-      plan_id: planId,
-      plan_name: plan.name,
-    },
-  });
+  };
 
   // Insert payment_transaction record
   const { error: txError } = await supabase
