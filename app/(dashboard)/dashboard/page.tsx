@@ -746,7 +746,7 @@ export default function DashboardHomePage() {
           <div id="card-coins" className="dsh-card" style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <Coins size={18} color="#F07820" strokeWidth={1.5} />
-              <span style={{ fontSize: 14, color: '#4B5563', fontFamily: F }}>SafeShift Coins</span>
+              <span style={{ fontSize: 14, color: '#4B5563', fontFamily: F }}>{t('home.safeShiftCoins')}</span>
             </div>
             <p style={{ fontSize: 34, fontWeight: 800, color: '#F07820', letterSpacing: '-0.03em', lineHeight: 1, margin: '0 0 8px', fontFamily: F }}>
               {Number(data.coins.balance).toLocaleString('en-IN')}
@@ -766,13 +766,13 @@ export default function DashboardHomePage() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
               <CreditCard size={16} color="rgba(255,255,255,0.85)" strokeWidth={2} />
-              <span style={{ fontSize: 14, color: '#fff', fontFamily: F }}>Total Payouts</span>
+              <span style={{ fontSize: 14, color: '#fff', fontFamily: F }}>{t('home.totalPayouts')}</span>
             </div>
             <p style={{ fontSize: 34, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1, margin: '0 0 8px', fontFamily: F }}>
               ₹{Number(data.wallet.total_earned).toLocaleString('en-IN')}
             </p>
             <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', fontFamily: F }}>
-              {data.wallet.total_claims > 0 ? `${data.wallet.total_claims} claim${data.wallet.total_claims > 1 ? 's' : ''} paid` : 'No claims yet'}
+              {data.wallet.total_claims > 0 ? `${data.wallet.total_claims} ${t('home.claimsPaid')}` : t('stats.noClaims')}
             </span>
           </div>
         </div>
@@ -784,7 +784,7 @@ export default function DashboardHomePage() {
         ══════════════════════════════════════════ */}
         <div className="dsh-s dsh-card" style={{ animationDelay: '0.4s' }}>
           <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>
-            Recent Activity
+            {t('home.recentActivity')}
           </p>
 
           {(() => {
@@ -827,7 +827,7 @@ export default function DashboardHomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <CloudRain size={16} color="#F07820" strokeWidth={2} />
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>24-Hour Forecast</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('home.forecast')}</span>
             </div>
             <span style={{ fontSize: 12, color: '#9CA3AF', fontFamily: F }}>{cityName}</span>
           </div>
@@ -907,7 +907,7 @@ export default function DashboardHomePage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Users2 size={18} color="#F07820" strokeWidth={1.8} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Your Zone</span>
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('home.yourZone')}</span>
             </div>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#F07820', fontFamily: F }}>{poolZoneName}</span>
           </div>
@@ -915,9 +915,9 @@ export default function DashboardHomePage() {
           {/* Stats row: Members, Risk Level, Claims */}
           <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
             {([
-              { value: String(poolMembers), label: 'Members', color: '#22C55E' },
-              { value: zoneRiskLabel, label: 'Risk Level', color: zoneRiskColor },
-              { value: String(data.zone_claims), label: 'Claims Paid', color: '#22C55E' },
+              { value: String(poolMembers), label: t('home.members'), color: '#22C55E' },
+              { value: zoneRiskLabel, label: t('home.riskLevel'), color: zoneRiskColor },
+              { value: String(data.zone_claims), label: t('home.claimsPaidZone'), color: '#22C55E' },
             ]).map(({ value, label, color }) => (
               <div key={label} style={{
                 flex: 1, background: '#FEF3E8',

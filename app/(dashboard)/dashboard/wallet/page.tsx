@@ -1,5 +1,6 @@
 import { createServerClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { getTranslator } from '@/lib/i18n/translations';
 
 interface WalletRow {
   driver_id: string;
@@ -54,19 +55,24 @@ export default async function WalletPage() {
 
   const payouts = (payoutsData as unknown as PayoutRow[]) || [];
 
+  // Get user language for translations
+  const { data: profileData } = await supabase.from('profiles').select('language').eq('id', user.id).single();
+  const lang = (profileData as unknown as { language: string } | null)?.language || 'en';
+  const t = getTranslator(lang);
+
   return (
     <div className="p-4 space-y-4">
-      <h1 className="serif text-xl font-bold" style={{ color: 'var(--ink)' }}>Wallet</h1>
+      <h1 className="serif text-xl font-bold" style={{ color: 'var(--ink)' }}>{t('wallet.title')}</h1>
 
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-xl p-4" style={{ background: 'rgba(240,120,32,0.08)', border: '1px solid #F07820' }}>
-          <div className="mono text-xs" style={{ color: '#F07820' }}>Total Earned</div>
+          <div className="mono text-xs" style={{ color: '#F07820' }}>{t('wallet.totalEarned')}</div>
           <div className="serif text-2xl font-bold" style={{ color: '#D96A10' }}>
             ₹{Number(wallet?.total_earned_inr || 0).toLocaleString()}
           </div>
         </div>
         <div className="rounded-xl p-4" style={{ background: 'rgba(240,120,32,0.08)', border: '1px solid #F07820' }}>
-          <div className="mono text-xs" style={{ color: '#F07820' }}>This Week</div>
+          <div className="mono text-xs" style={{ color: '#F07820' }}>{t('wallet.thisWeek')}</div>
           <div className="serif text-2xl font-bold" style={{ color: '#D96A10' }}>
             ₹{Number(wallet?.this_week_earned_inr || 0).toLocaleString()}
           </div>
@@ -74,16 +80,16 @@ export default async function WalletPage() {
       </div>
 
       <div className="rounded-xl p-4" style={{ background: 'var(--cream-d)', border: '1px solid var(--rule)' }}>
-        <div className="mono text-xs" style={{ color: 'var(--ink-60)' }}>Coins Balance</div>
+        <div className="mono text-xs" style={{ color: 'var(--ink-60)' }}>{t('wallet.coinsBalance')}</div>
         <div className="serif text-2xl font-bold" style={{ color: 'var(--ink)' }}>
-          {Number(coins?.balance || 0).toLocaleString()} coins
+          {Number(coins?.balance || 0).toLocaleString()} {t('wallet.coins')}
         </div>
       </div>
 
       <div className="rounded-xl p-4" style={{ border: '1px solid var(--rule)' }}>
-        <h3 className="serif font-medium mb-3" style={{ color: 'var(--ink)' }}>Payout History</h3>
+        <h3 className="serif font-medium mb-3" style={{ color: 'var(--ink)' }}>{t('wallet.payoutHistory')}</h3>
         {payouts.length === 0 ? (
-          <p className="text-sm text-center py-4" style={{ color: 'var(--ink-60)' }}>No payouts yet</p>
+          <p className="text-sm text-center py-4" style={{ color: 'var(--ink-60)' }}>{t('wallet.noPayouts')}</p>
         ) : (
           <div className="space-y-3">
             {payouts.map((payout) => {

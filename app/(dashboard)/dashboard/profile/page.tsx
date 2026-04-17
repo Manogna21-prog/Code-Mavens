@@ -43,11 +43,11 @@ const CITY_NAMES: Record<string, string> = {
 
 const F = "var(--font-inter),'Inter',sans-serif";
 
-function tierLabel(score: number): string {
-  if (score >= 0.8) return 'Expert';
-  if (score >= 0.6) return 'Reliable';
-  if (score >= 0.4) return 'Growing';
-  return 'New';
+function tierLabel(score: number, t: (key: string) => string): string {
+  if (score >= 0.8) return t('profile.expert');
+  if (score >= 0.6) return t('profile.reliable');
+  if (score >= 0.4) return t('profile.growing');
+  return t('profile.new');
 }
 
 // ─── Toggle Switch ───────────────────────────────────────────────────────────
@@ -168,25 +168,25 @@ export default function ProfilePage() {
   const currentLangLabel = LANGUAGES.find(l => l.code === profile.language)?.label || 'English';
   const cityFull = CITY_NAMES[profile.city || ''] || (profile.city || 'City');
   const initial = (profile.full_name || 'D')[0].toUpperCase();
-  const tier = tierLabel(profile.trust_score);
+  const tier = tierLabel(profile.trust_score, t);
   const pts = Math.round(profile.trust_score * 2000 + stats.policies * 100);
   const zoneCode = `${(profile.city || 'XX').slice(0, 3).toUpperCase()}-01, ${cityFull}`;
   const memberSince = new Date(profile.member_since).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 
   const ACHIEVEMENTS = [
-    { emoji: '🛡️', bg: '#F0EDEB', label: `${stats.policies} Policies` },
-    { emoji: '🔥', bg: '#FEF9E7', label: `${stats.streak}w Streak` },
-    { emoji: '💰', bg: '#FEF3E8', label: `${stats.claims} Claims` },
+    { emoji: '🛡️', bg: '#F0EDEB', label: `${stats.policies} ${t('profile.policies')}` },
+    { emoji: '🔥', bg: '#FEF9E7', label: `${stats.streak}w ${t('profile.streak')}` },
+    { emoji: '💰', bg: '#FEF3E8', label: `${stats.claims} ${t('profile.claims')}` },
     { emoji: '👥', bg: '#FEF3E8', label: '3 Referrals' },
   ];
 
   const DETAILS = [
-    { label: 'Mobile', value: profile.phone_number || '—' },
-    { label: 'Platform', value: 'Porter' },
-    { label: 'Zone', value: zoneCode },
-    { label: 'Shift', value: 'Full Day (10 hrs)' },
-    { label: 'Member Since', value: memberSince },
-    { label: 'UPI', value: profile.upi_id || '—' },
+    { label: t('profile.mobile'), value: profile.phone_number || '—' },
+    { label: t('profile.platform'), value: 'Porter' },
+    { label: t('profile.zone'), value: zoneCode },
+    { label: t('profile.shift'), value: t('profile.fullDay') },
+    { label: t('profile.memberSince'), value: memberSince },
+    { label: t('profile.upi'), value: profile.upi_id || '—' },
   ];
 
   // Card style adapts to dark mode
@@ -201,7 +201,7 @@ export default function ProfilePage() {
     <div style={{ minHeight: '100vh', paddingBottom: 16 }}>
       <div style={{ maxWidth: 480, margin: '0 auto', padding: '24px 20px 0', display: 'flex', flexDirection: 'column', gap: 16 }}>
 
-        <h1 style={{ fontSize: 28, fontWeight: 800, color: textPrimary, margin: 0, letterSpacing: '-0.03em', fontFamily: F }}>Profile</h1>
+        <h1 style={{ fontSize: 28, fontWeight: 800, color: textPrimary, margin: 0, letterSpacing: '-0.03em', fontFamily: F }}>{t('profile.title')}</h1>
 
         {/* ══ 1. Profile Header Card ══ */}
         <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 16, padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -209,7 +209,7 @@ export default function ProfilePage() {
             <span style={{ fontSize: 38, fontWeight: 800, color: '#fff', fontFamily: F, lineHeight: 1 }}>{initial}</span>
           </div>
           <p style={{ fontSize: 24, fontWeight: 800, color: textPrimary, margin: '12px 0 0', fontFamily: F, textAlign: 'center' }}>{profile.full_name || 'Driver'}</p>
-          <p style={{ fontSize: 14, color: textSecondary, margin: '4px 0 0', fontFamily: F }}>Porter Partner · {cityFull}</p>
+          <p style={{ fontSize: 14, color: textSecondary, margin: '4px 0 0', fontFamily: F }}>{t('profile.porterPartner')} · {cityFull}</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 10 }}>
             <Shield size={16} color="#F07820" strokeWidth={1.8} />
             <span style={{ fontSize: 14, fontWeight: 600, color: '#F07820', fontFamily: F }}>{tier} · {pts.toLocaleString('en-IN')} pts</span>
@@ -218,7 +218,7 @@ export default function ProfilePage() {
 
         {/* ══ 2. Quick Stats ══ */}
         <div style={{ display: 'flex', gap: 12 }}>
-          {[{ value: String(stats.policies), label: 'Policies' }, { value: String(stats.claims), label: 'Claims' }, { value: `${stats.streak}w`, label: 'Streak' }].map(({ value, label }) => (
+          {[{ value: String(stats.policies), label: t('profile.policies') }, { value: String(stats.claims), label: t('profile.claims') }, { value: `${stats.streak}w`, label: t('profile.streak') }].map(({ value, label }) => (
             <div key={label} style={{ flex: 1, background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 14, padding: '16px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
               <span style={{ fontSize: 26, fontWeight: 800, color: '#F07820', fontFamily: F, lineHeight: 1 }}>{value}</span>
               <span style={{ fontSize: 13, color: textSecondary, fontFamily: F }}>{label}</span>
@@ -228,7 +228,7 @@ export default function ProfilePage() {
 
         {/* ══ 3. Achievements ══ */}
         <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 16, padding: 20 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: textSecondary, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>Achievements</p>
+          <p style={{ fontSize: 13, fontWeight: 600, color: textSecondary, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>{t('profile.achievements')}</p>
           <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
             {ACHIEVEMENTS.map(({ emoji, bg, label }) => (
               <div key={label} style={{ flex: 1, background: darkMode ? '#222' : bg, borderRadius: 12, padding: '12px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
@@ -261,7 +261,7 @@ export default function ProfilePage() {
             <div onClick={() => setNotifOpen(!notifOpen)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: notifOpen ? 'none' : `1px solid ${divider}`, transition: 'background 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
               <Bell size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>Notification Settings</span>
+              <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>{t('profile.notifications')}</span>
               <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: notifOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
             </div>
             {notifOpen && (
@@ -357,7 +357,7 @@ export default function ProfilePage() {
           <div onClick={() => {}} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: `1px solid ${divider}`, transition: 'background 0.15s' }}
             onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
             <CreditCard size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>Payment Methods</span>
+            <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>{t('profile.paymentMethods')}</span>
             <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0 }} />
           </div>
 
@@ -386,7 +386,7 @@ export default function ProfilePage() {
             <div onClick={() => setHelpOpen(!helpOpen)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: helpOpen ? 'none' : 'none', transition: 'background 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
               <Headphones size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-              <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>Help & Support</span>
+              <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>{t('profile.helpSupport')}</span>
               <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: helpOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
             </div>
             {helpOpen && (
