@@ -31,6 +31,7 @@ interface DashboardData {
     city_zones: ZoneEntry[];
     driver_zones: ZoneEntry[];
   };
+  last_tier: string | null;
 }
 
 interface ZoneContribution {
@@ -155,8 +156,8 @@ function formatDate(dateStr: string): string {
 
 function riskColor(value: number): string {
   if (value > 0.7) return 'var(--red-acc)';
-  if (value > 0.4) return '#f59e0b';
-  return 'var(--teal)';
+  if (value > 0.4) return '#F07820';
+  return '#F07820';
 }
 
 function riskLabel(value: number): string {
@@ -493,34 +494,45 @@ export default function PolicyPage() {
 
       {!policy ? (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
-          <p
-            className="serif"
-            style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}
-          >
-            No active policy
-          </p>
-          <p
-            className="sans"
-            style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}
-          >
-            Subscribe to a plan to get coverage.
-          </p>
-          <a
-            href="/onboarding"
-            style={{
-              display: 'inline-block',
-              marginTop: 16,
-              padding: '10px 24px',
-              borderRadius: 8,
-              background: 'var(--teal)',
-              color: 'var(--cream)',
-              fontWeight: 600,
-              fontSize: 14,
-              textDecoration: 'none',
-            }}
-          >
-            Get Covered
-          </a>
+          {dashboard.last_tier ? (
+            <>
+              <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: '#EF4444' }}>
+                Policy Expired
+              </p>
+              <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
+                Your {dashboard.last_tier} plan has expired. Reinstate to stay covered.
+              </p>
+              <a
+                href={`/dashboard/policy/reinstate?tier=${dashboard.last_tier}`}
+                style={{
+                  display: 'inline-block', marginTop: 16, padding: '10px 24px',
+                  borderRadius: 8, background: '#F07820', color: '#fff',
+                  fontWeight: 600, fontSize: 14, textDecoration: 'none',
+                }}
+              >
+                Reinstate Policy
+              </a>
+            </>
+          ) : (
+            <>
+              <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
+                No active policy
+              </p>
+              <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
+                Subscribe to a plan to get coverage.
+              </p>
+              <a
+                href="/dashboard/policy/purchase"
+                style={{
+                  display: 'inline-block', marginTop: 16, padding: '10px 24px',
+                  borderRadius: 8, background: '#F07820', color: 'var(--cream)',
+                  fontWeight: 600, fontSize: 14, textDecoration: 'none',
+                }}
+              >
+                Get Covered
+              </a>
+            </>
+          )}
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -558,7 +570,7 @@ export default function PolicyPage() {
                   borderRadius: 20,
                   ...(isExpired
                     ? { color: 'var(--red-acc)', border: '1px solid var(--red-acc)' }
-                    : { color: 'var(--teal)', border: '1px solid var(--teal)' }),
+                    : { color: '#F07820', border: '1px solid #F07820' }),
                 }}
               >
                 {isExpired ? 'EXPIRED' : 'ACTIVE'}
@@ -622,7 +634,7 @@ export default function PolicyPage() {
                       ? { color: 'var(--red-acc)', border: '1px solid var(--red-acc)' }
                       : tier === 'medium'
                         ? { color: 'var(--ink-60)', border: '1px solid var(--ink-30)' }
-                        : { color: 'var(--teal)', border: '1px solid var(--teal)' }),
+                        : { color: '#F07820', border: '1px solid #F07820' }),
                   }}
                 >
                   {tier.toUpperCase()}
@@ -697,7 +709,7 @@ export default function PolicyPage() {
                 style={{
                   fontSize: 18,
                   fontWeight: 700,
-                  color: 'var(--teal)',
+                  color: '#F07820',
                   marginTop: 2,
                 }}
               >
@@ -725,7 +737,7 @@ export default function PolicyPage() {
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
                   Weather Risk Addon
                 </span>
-                <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: 'var(--teal)' }}>
+                <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: '#F07820' }}>
                   +{'\u20B9'}{weatherAddon.toFixed(2)}
                 </span>
               </div>
@@ -734,7 +746,7 @@ export default function PolicyPage() {
                 <span className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>
                   UBI Addon (Zone Risk)
                 </span>
-                <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: 'var(--teal)' }}>
+                <span className="serif" style={{ fontSize: 14, fontWeight: 600, color: '#F07820' }}>
                   +{'\u20B9'}{ubiAddon.toFixed(2)}
                 </span>
               </div>
@@ -751,7 +763,7 @@ export default function PolicyPage() {
                 <span className="sans" style={{ fontSize: 15, fontWeight: 700, color: 'var(--ink)' }}>
                   Total
                 </span>
-                <span className="serif" style={{ fontSize: 18, fontWeight: 900, color: 'var(--teal)' }}>
+                <span className="serif" style={{ fontSize: 18, fontWeight: 900, color: '#F07820' }}>
                   {'\u20B9'}{Number(totalPremium).toFixed(2)}/week
                 </span>
               </div>
@@ -766,9 +778,9 @@ export default function PolicyPage() {
               isExpired
                 ? { borderColor: 'var(--red-acc)', background: 'rgba(192,57,43,0.04)' }
                 : isUrgent
-                  ? { borderColor: '#f59e0b', background: 'rgba(245,158,11,0.04)' }
+                  ? { borderColor: '#F07820', background: 'rgba(245,158,11,0.04)' }
                   : isReminder
-                    ? { borderColor: 'var(--teal)', background: 'rgba(0,128,128,0.03)' }
+                    ? { borderColor: '#F07820', background: 'rgba(240,120,32,0.03)' }
                     : {}
             }
           >
@@ -808,7 +820,7 @@ export default function PolicyPage() {
               <>
                 <p
                   className="sans"
-                  style={{ fontSize: 14, fontWeight: 500, color: 'var(--teal)' }}
+                  style={{ fontSize: 14, fontWeight: 500, color: '#F07820' }}
                 >
                   {daysLeft} days remaining on your current policy.
                 </p>
@@ -823,7 +835,7 @@ export default function PolicyPage() {
               <>
                 <p
                   className="sans"
-                  style={{ fontSize: 14, fontWeight: 500, color: 'var(--teal)' }}
+                  style={{ fontSize: 14, fontWeight: 500, color: '#F07820' }}
                 >
                   You are covered.
                 </p>
@@ -930,7 +942,7 @@ export default function PolicyPage() {
                           style={{
                             fontSize: 14,
                             fontWeight: 700,
-                            color: isPositive ? 'var(--teal)' : 'var(--red-acc)',
+                            color: isPositive ? '#F07820' : 'var(--red-acc)',
                           }}
                         >
                           {isPositive ? '+' : ''}
@@ -1151,7 +1163,7 @@ export default function PolicyPage() {
                     width: 6,
                     height: 6,
                     borderRadius: '50%',
-                    background: 'var(--teal)',
+                    background: '#F07820',
                     marginTop: 6,
                     flexShrink: 0,
                   }}
@@ -1178,7 +1190,7 @@ export default function PolicyPage() {
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: '#f59e0b',
+                      background: '#F07820',
                       marginTop: 6,
                       flexShrink: 0,
                     }}

@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getCityCoordinates } from '@/lib/config/cities';
+import { isSundayPaymentWindow, getNextSunday } from '@/lib/utils/date';
 
 const ML_SERVICE_URL = process.env.ML_SERVICE_URL || 'http://localhost:8001';
 
@@ -113,6 +114,9 @@ interface OpenMeteoResponse {
   };
   hourly?: {
     time?: string[];
+    temperature_2m?: number[];
+    precipitation?: number[];
+    weather_code?: number[];
     us_aqi?: (number | null)[];
   };
 }
@@ -146,6 +150,8 @@ export async function GET(request: Request) {
       coinsRes,
       disruptionsRes,
       streakRes,
+      lastPolicyRes,
+      nextWeekPolicyRes,
     ] = await Promise.all([
       // Profile
       admin
@@ -199,6 +205,27 @@ export async function GET(request: Request) {
         .select('week_start_date, payment_status')
         .eq('profile_id', user.id)
         .order('week_start_date', { ascending: false }),
+
+      // Most recent policy (any status) — for reinstate flow
+      admin
+        .from('weekly_policies')
+        .select('plan_packages(tier, name, slug)')
+        .eq('profile_id', user.id)
+        .order('week_end_date', { ascending: false })
+        .limit(1)
+        .single(),
+
+      // Next week policy (paid but not yet active)
+      admin
+        .from('weekly_policies')
+        .select('week_start_date, final_premium_inr, plan_packages(tier, name)')
+        .eq('profile_id', user.id)
+        .eq('is_active', false)
+        .in('payment_status', ['paid', 'demo'])
+        .gt('week_start_date', today)
+        .order('week_start_date', { ascending: true })
+        .limit(1)
+        .single(),
     ]);
 
     const profile = profileRes.data as unknown as ProfileRow | null;
@@ -207,12 +234,25 @@ export async function GET(request: Request) {
     const coins = coinsRes.data as unknown as CoinBalanceRow | null;
     const allDisruptions = (disruptionsRes.data as unknown as DisruptionRow[]) || [];
     const streakPolicies = (streakRes.data as unknown as StreakPolicyRow[]) || [];
+    const lastPolicyRaw = lastPolicyRes?.data as unknown as { plan_packages: { tier: string; name: string; slug: string } | null } | null;
+    const lastTier = lastPolicyRaw?.plan_packages?.slug ?? null;
+    const nextWeekPolicyRaw = nextWeekPolicyRes?.data as unknown as { week_start_date: string; final_premium_inr: number; plan_packages: { tier: string; name: string } | null } | null;
+
+    const sundayWindow = isSundayPaymentWindow();
+    const nextRenewalDate = !sundayWindow ? getNextSunday().toISOString().split('T')[0] : null;
 
     const city = profile?.city || 'mumbai';
     const coords = getCityCoordinates(city) || { lat: profile?.zone_latitude || 19.076, lng: profile?.zone_longitude || 72.8777 };
 
     // Filter disruptions by user city
     const cityDisruptions = allDisruptions.filter((d) => d.event_type && d.city === city);
+
+    // Claims count in the user's city (for zone pool card)
+    const { count: zoneClaims } = await admin
+      .from('parametric_claims')
+      .select('*, live_disruption_events!inner(city)', { count: 'exact', head: true })
+      .eq('live_disruption_events.city', city)
+      .eq('status', 'paid');
 
     // Compute streak: consecutive weeks with paid or demo policies
     let streak = 0;
@@ -238,6 +278,17 @@ export async function GET(request: Request) {
         coins: { balance: coins?.balance ?? 0 },
         streak,
         zone_status: zoneStatus(cityDisruptions.length),
+        last_tier: lastTier,
+        next_week_policy: nextWeekPolicyRaw ? {
+          tier: nextWeekPolicyRaw.plan_packages?.tier ?? null,
+          name: nextWeekPolicyRaw.plan_packages?.name ?? null,
+          premium: nextWeekPolicyRaw.final_premium_inr,
+          week_start: nextWeekPolicyRaw.week_start_date,
+        } : null,
+        is_sunday_window: sundayWindow,
+        next_renewal_date: nextRenewalDate,
+        zone_claims: zoneClaims ?? 0,
+        city_coords: { lat: coords.lat, lng: coords.lng },
       });
     }
 
@@ -285,7 +336,7 @@ export async function GET(request: Request) {
 
       // Open-Meteo 5-day forecast + Air Quality
       fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&daily=precipitation_sum,wind_speed_10m_max,temperature_2m_max,temperature_2m_min&current=temperature_2m,precipitation,wind_speed_10m&timezone=Asia/Kolkata&forecast_days=5`,
+        `https://api.open-meteo.com/v1/forecast?latitude=${coords.lat}&longitude=${coords.lng}&daily=precipitation_sum,wind_speed_10m_max,temperature_2m_max,temperature_2m_min&hourly=temperature_2m,precipitation,weather_code&current=temperature_2m,precipitation,wind_speed_10m&timezone=Asia/Kolkata&forecast_days=2`,
       ).then((r) => r.json() as Promise<OpenMeteoResponse>),
 
       // Air Quality API (current + hourly for daily aggregation)
@@ -341,6 +392,15 @@ export async function GET(request: Request) {
       };
     });
 
+    // Build hourly weather for 24h radar
+    const hourly = (forecastRaw?.hourly?.time ?? []).slice(0, 24).map((time, i) => ({
+      time,
+      hour: new Date(time).getHours(),
+      temp: forecastRaw?.hourly?.temperature_2m?.[i] ?? 0,
+      rain_mm: forecastRaw?.hourly?.precipitation?.[i] ?? 0,
+      weather_code: forecastRaw?.hourly?.weather_code?.[i] ?? 0,
+    }));
+
     // 5. Assemble response
     return NextResponse.json({
       profile: {
@@ -377,6 +437,7 @@ export async function GET(request: Request) {
           : null,
       },
       forecast,
+      hourly,
       alerts: cityDisruptions.map((d) => ({
         id: d.id,
         event_type: d.event_type,
@@ -399,6 +460,17 @@ export async function GET(request: Request) {
       },
       streak,
       zone_status: zoneStatus(cityDisruptions.length),
+      last_tier: lastTier,
+      next_week_policy: nextWeekPolicyRaw ? {
+        tier: nextWeekPolicyRaw.plan_packages?.tier ?? null,
+        name: nextWeekPolicyRaw.plan_packages?.name ?? null,
+        premium: nextWeekPolicyRaw.final_premium_inr,
+        week_start: nextWeekPolicyRaw.week_start_date,
+      } : null,
+      is_sunday_window: sundayWindow,
+      next_renewal_date: nextRenewalDate,
+      zone_claims: zoneClaims ?? 0,
+      city_coords: { lat: coords.lat, lng: coords.lng },
     });
   } catch (error) {
     console.error('[Dashboard API] Error:', error);

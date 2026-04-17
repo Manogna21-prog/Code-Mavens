@@ -131,38 +131,6 @@ export async function checkAndAwardConsecutiveWeeks(
 }
 
 /**
- * Award disruption active bonus when driver is active during an event
- */
-export async function awardDisruptionActive(
-  profileId: string,
-  claimId: string
-): Promise<{ awarded: boolean }> {
-  // Avoid duplicate awards for same claim
-  const supabase = createAdminClient();
-
-  const { count } = await supabase
-    .from('coins_ledger')
-    .select('*', { count: 'exact', head: true })
-    .eq('profile_id', profileId)
-    .eq('activity', 'disruption_active')
-    .eq('reference_id', claimId);
-
-  if ((count ?? 0) > 0) {
-    return { awarded: false };
-  }
-
-  await awardCoins(
-    profileId,
-    'disruption_active',
-    COINS.DISRUPTION_ACTIVE,
-    'Active during disruption event',
-    claimId
-  );
-
-  return { awarded: true };
-}
-
-/**
  * Award referral bonus to the referrer
  */
 export async function awardReferral(
@@ -191,6 +159,86 @@ export async function awardReferral(
     refereeId
   );
 
+  return { awarded: true };
+}
+
+/**
+ * Award coins for completing profile (all key fields filled)
+ */
+export async function checkAndAwardCompleteProfile(
+  profileId: string
+): Promise<{ awarded: boolean }> {
+  const supabase = createAdminClient();
+
+  // Check if already awarded
+  const { count } = await supabase
+    .from('coins_ledger')
+    .select('*', { count: 'exact', head: true })
+    .eq('profile_id', profileId)
+    .eq('activity', 'complete_profile');
+
+  if ((count ?? 0) > 0) return { awarded: false };
+
+  // Check if profile is actually complete
+  const { data: profileRaw } = await supabase
+    .from('profiles')
+    .select('full_name, city, dl_number, upi_id')
+    .eq('id', profileId)
+    .single();
+
+  const profile = profileRaw as unknown as {
+    full_name: string | null; city: string | null;
+    dl_number: string | null; upi_id: string | null;
+  } | null;
+
+  if (!profile?.full_name || !profile.city || !profile.dl_number || !profile.upi_id) {
+    return { awarded: false };
+  }
+
+  await awardCoins(profileId, 'complete_profile', COINS.COMPLETE_PROFILE, 'Profile completed bonus');
+  return { awarded: true };
+}
+
+/**
+ * Award coins for 6 months of clean claims (no fraud flags)
+ */
+export async function checkAndAwardCleanClaims(
+  profileId: string
+): Promise<{ awarded: boolean }> {
+  const supabase = createAdminClient();
+
+  // Check if already awarded in last 6 months
+  const sixMonthsAgo = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { count: alreadyAwarded } = await supabase
+    .from('coins_ledger')
+    .select('*', { count: 'exact', head: true })
+    .eq('profile_id', profileId)
+    .eq('activity', 'clean_claims_6_months')
+    .gte('created_at', sixMonthsAgo);
+
+  if ((alreadyAwarded ?? 0) > 0) return { awarded: false };
+
+  // Check for any fraud-flagged claims in last 6 months
+  const { count: fraudClaims } = await supabase
+    .from('parametric_claims')
+    .select('*', { count: 'exact', head: true })
+    .eq('profile_id', profileId)
+    .eq('fraud_flag', true)
+    .gte('created_at', sixMonthsAgo);
+
+  if ((fraudClaims ?? 0) > 0) return { awarded: false };
+
+  // Check that user has had at least 1 policy in the last 6 months (not a dormant user)
+  const { count: policyCount } = await supabase
+    .from('weekly_policies')
+    .select('*', { count: 'exact', head: true })
+    .eq('profile_id', profileId)
+    .gte('week_start_date', sixMonthsAgo.split('T')[0]);
+
+  if ((policyCount ?? 0) === 0) return { awarded: false };
+
+  await awardCoins(profileId, 'clean_claims_6_months', COINS.CLEAN_CLAIMS_6_MONTHS, '6 months clean claims bonus');
   return { awarded: true };
 }
 

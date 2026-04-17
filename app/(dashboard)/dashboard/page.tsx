@@ -3,11 +3,11 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import {
-  Moon, Bell, ChevronRight, CloudRain, Thermometer, Wind,
-  TrendingUp, Award, Shield,
-  Flame, BellRing, ClipboardCheck, CreditCard, Users, Headphones,
-  Check, Phone, Users2,
-  AlertTriangle, HeartPulse, Sun, Cloud, CloudDrizzle,
+  Bell, CloudRain, Thermometer, Wind, Coins,
+  TrendingUp, Shield,
+  BellRing, CreditCard,
+  Check, Users2,
+  Sun, Cloud, CloudDrizzle,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { getTranslator } from '@/lib/i18n/translations';
@@ -22,6 +22,7 @@ interface Prediction { probability: number; risk_level: string; }
 interface ForecastDay { date: string; day_name: string; temp_max: number; temp_min: number; rain_mm: number; wind_kmh: number; aqi: number; }
 interface AlertRow { id: string; event_type: string; severity_score: number; city: string; trigger_value: number | null; created_at: string; }
 interface ZoneEntry { zone_id?: string; zone_name?: string; name?: string; risk_score: number; }
+interface HourlyWeather { time: string; hour: number; temp: number; rain_mm: number; weather_code: number; }
 
 interface DashboardData {
   profile: Profile;
@@ -29,12 +30,19 @@ interface DashboardData {
   weather: Weather;
   predictions: { rainfall: Prediction | null; wind: Prediction | null; aqi: Prediction | null; };
   forecast: ForecastDay[];
+  hourly?: HourlyWeather[];
   alerts: AlertRow[];
   zones: { city_zones: ZoneEntry[]; driver_zones: ZoneEntry[]; };
   wallet: { total_earned: number; this_week_earned: number; total_claims: number; };
   coins: { balance: number; };
   streak: number;
   zone_status: 'safe' | 'alert' | 'danger';
+  last_tier: string | null;
+  next_week_policy: { tier: string | null; name: string | null; premium: number; week_start: string } | null;
+  is_sunday_window: boolean;
+  next_renewal_date: string | null;
+  zone_claims: number;
+  city_coords: { lat: number; lng: number } | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,21 +72,42 @@ function fmtDate(iso: string): string {
 // ─────────────────────────────────────────────────────────────────────────────
 // STREAK COLOURS  (amber → brand orange, "fire" gradient)
 // ─────────────────────────────────────────────────────────────────────────────
-const STREAK_COLORS = [
-  '#FDE68A', '#FCD34D', '#FBBF24', '#F59E0B', '#F97316', '#EA580C', '#F07820',
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FORECAST SPARKLINE
 // ─────────────────────────────────────────────────────────────────────────────
 function ForecastSparkline({ forecast }: { forecast: ForecastDay[] }) {
-  const W = 340, H = 110;
   const days = forecast.slice(0, 5);
+
+  // Layout constants
+  const LEFT = 40;   // space for Y-axis labels
+  const RIGHT = 10;
+  const TOP = 12;
+  const BOTTOM = 34; // space for X-axis day labels + title
+  const CHART_W = 300;
+  const CHART_H = 100;
+  const W = LEFT + CHART_W + RIGHT;
+  const H = TOP + CHART_H + BOTTOM;
+
+  const yLabels = [
+    { label: 'High', y: TOP },
+    { label: 'Med', y: TOP + CHART_H * 0.5 },
+    { label: 'Low', y: TOP + CHART_H },
+  ];
 
   if (days.length < 2) {
     return (
-      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', height: 110 }}>
-        <line x1="0" y1={H * 0.55} x2={W} y2={H * 0.35} stroke="#1A40C0" strokeWidth="2.5" />
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%', height: 'auto' }}>
+        {/* Y-axis labels */}
+        {yLabels.map(({ label, y }) => (
+          <text key={label} x={LEFT - 6} y={y + 4} textAnchor="end" fontSize="9" fill="#9CA3AF" fontFamily="var(--font-inter),'Inter',sans-serif">{label}</text>
+        ))}
+        {/* Y-axis gridlines */}
+        {yLabels.map(({ label, y }) => (
+          <line key={`g-${label}`} x1={LEFT} y1={y} x2={LEFT + CHART_W} y2={y} stroke="#E5E7EB" strokeWidth="0.5" />
+        ))}
+        <line x1={LEFT} y1={TOP + CHART_H * 0.55} x2={LEFT + CHART_W} y2={TOP + CHART_H * 0.35} stroke="#1A40C0" strokeWidth="2.5" />
+        <text x={W / 2} y={H - 4} textAnchor="middle" fontSize="9" fill="#9CA3AF" fontFamily="var(--font-inter),'Inter',sans-serif">No forecast data</text>
       </svg>
     );
   }
@@ -86,8 +115,10 @@ function ForecastSparkline({ forecast }: { forecast: ForecastDay[] }) {
   const pts = days.map((day, i) => {
     const risk = Math.min(1, day.rain_mm / 80 + day.wind_kmh / 120 + Math.max(0, day.aqi - 50) / 500);
     return {
-      x: (i / (days.length - 1)) * W,
-      y: (H - 16) - risk * (H - 32),
+      x: LEFT + (i / (days.length - 1)) * CHART_W,
+      y: TOP + (CHART_H - 8) - risk * (CHART_H - 16),
+      risk,
+      day_name: day.day_name,
     };
   });
 
@@ -97,18 +128,48 @@ function ForecastSparkline({ forecast }: { forecast: ForecastDay[] }) {
     const mx = (p.x + c.x) / 2;
     linePath += ` C ${mx} ${p.y} ${mx} ${c.y} ${c.x} ${c.y}`;
   }
-  const fillPath = `${linePath} L ${pts[pts.length - 1].x} ${H} L 0 ${H} Z`;
+  const fillPath = `${linePath} L ${pts[pts.length - 1].x} ${TOP + CHART_H} L ${pts[0].x} ${TOP + CHART_H} Z`;
 
   return (
-    <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" style={{ display: 'block', height: 110 }}>
+    <svg width="100%" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid meet" style={{ display: 'block', width: '100%', height: 'auto' }}>
       <defs>
         <linearGradient id="dsh-spark-fill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="rgba(26,64,192,0.18)" />
           <stop offset="100%" stopColor="rgba(26,64,192,0)" />
         </linearGradient>
       </defs>
+
+      {/* Y-axis labels + gridlines */}
+      {yLabels.map(({ label, y }) => (
+        <g key={label}>
+          <text x={LEFT - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#9CA3AF" fontFamily="var(--font-inter),'Inter',sans-serif">{label}</text>
+          <line x1={LEFT} y1={y} x2={LEFT + CHART_W} y2={y} stroke="#E5E7EB" strokeWidth="0.5" strokeDasharray="4 3" />
+        </g>
+      ))}
+
+      {/* Chart area */}
       <path d={fillPath} fill="url(#dsh-spark-fill)" />
       <path d={linePath} fill="none" stroke="#1A40C0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+
+      {/* Data points + X-axis day labels */}
+      {pts.map((p, i) => (
+        <g key={i}>
+          <circle cx={p.x} cy={p.y} r={3.5} fill="#1A40C0" stroke="#fff" strokeWidth="1.5" />
+          <text x={p.x} y={TOP + CHART_H + 14} textAnchor="middle" fontSize="9" fontWeight="600" fill="#6B7280" fontFamily="var(--font-inter),'Inter',sans-serif">
+            {p.day_name}
+          </text>
+        </g>
+      ))}
+
+      {/* Axis label — Y */}
+      <text x={8} y={TOP + CHART_H / 2} textAnchor="middle" fontSize="8" fill="#9CA3AF" fontFamily="var(--font-inter),'Inter',sans-serif" transform={`rotate(-90, 8, ${TOP + CHART_H / 2})`}>
+        Risk Level
+      </text>
+
+      {/* Axis label — X */}
+      <text x={LEFT + CHART_W / 2} y={TOP + CHART_H + 30} textAnchor="middle" fontSize="8" fill="#9CA3AF" fontFamily="var(--font-inter),'Inter',sans-serif">
+        Forecast Day
+      </text>
     </svg>
   );
 }
@@ -183,6 +244,9 @@ export default function DashboardHomePage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [userLang, setUserLang] = useState('en');
+  const [showNotifs, setShowNotifs] = useState(false);
+  const [notifs, setNotifs] = useState<{ type: string; message: string; timestamp: string; pinned: boolean }[]>([]);
+  const [notifsLoaded, setNotifsLoaded] = useState(false);
 
   useEffect(() => {
     // Fetch user language from profile
@@ -207,6 +271,13 @@ export default function DashboardHomePage() {
           .then((res) => res.ok ? res.json() : null)
           .then((full: DashboardData | null) => { if (full?.profile) setData(full); })
           .catch(() => {});
+        // Phase 3: Check-in — award any earned coins (fire and forget)
+        fetch('/api/driver/check-in', { method: 'POST' }).catch(() => {});
+        // Phase 4: Fetch notifications for activity card + notification panel
+        fetch('/api/driver/notifications').then(r => r.json()).then(d => {
+          if (d.notifications) setNotifs(d.notifications);
+          setNotifsLoaded(true);
+        }).catch(() => setNotifsLoaded(true));
       })
       .catch(() => setLoading(false));
   }, []);
@@ -220,7 +291,7 @@ export default function DashboardHomePage() {
   // ── Derived values ────────────────────────────────────────────────────────
   const cityName      = CITY_NAMES[data.profile.city] || data.profile.city;
   const driverZone    = data.zones.driver_zones?.[0];
-  const driverZoneName = driverZone ? zoneName(driverZone) : `${cityName}-01`;
+  const driverZoneName = driverZone ? zoneName(driverZone) : cityName;
 
   // Zone card palette
   const zoneCardBg     = data.zone_status === 'safe' ? '#EEFBF3' : data.zone_status === 'alert' ? '#FFFBEB' : '#FEF2F2';
@@ -235,20 +306,7 @@ export default function DashboardHomePage() {
     : 0;
   const progressPct = Math.round((daysLeft / 7) * 100);
 
-  // Forecast premium increase estimate
-  const rainProb  = data.predictions?.rainfall?.probability ?? 0;
-  const windProb  = data.predictions?.wind?.probability     ?? 0;
-  const aqiProb   = data.predictions?.aqi?.probability      ?? 0;
-  const forecastIncrease = Math.max(5, Math.round(rainProb * 35 + windProb * 20 + aqiProb * 15));
-  const nextPremium      = data.policy ? Math.round(data.policy.premium * (1 + forecastIncrease / 100)) : null;
-  const forecastDay      = data.forecast.find((d) => d.day_name === 'Mon') ?? data.forecast[Math.min(1, data.forecast.length - 1)];
-  const forecastDayName  = forecastDay?.day_name ?? 'Mon';
 
-  const forecastDesc = rainProb > 0.5
-    ? `Monsoon approaching your zone. Renew early at ₹${data.policy?.premium ?? '--'}/wk before it rises to ₹${nextPremium ?? '--'}/wk.`
-    : aqiProb > 0.5
-    ? `Air quality risks ahead in ${cityName}. Current premium ₹${data.policy?.premium ?? '--'}/wk may rise to ₹${nextPremium ?? '--'}/wk.`
-    : `Weather looks stable in ${cityName}. Lock in your current rate of ₹${data.policy?.premium ?? '--'}/wk now.`;
 
   // GigPoints tier
   const gigTier = data.coins.balance >= 3000 ? t('tier.elite')
@@ -256,63 +314,16 @@ export default function DashboardHomePage() {
     : data.coins.balance >= 500  ? t('tier.reliable')
     : t('tier.starter');
 
-  // Net savings ROI (only show if there are earnings)
-  const roiPct = data.wallet.total_earned > 0 && data.policy
-    ? Math.round((data.wallet.total_earned / Math.max(data.policy.premium, 1)) * 100)
-    : null;
 
-  const notifCount = data.alerts.length;
 
-  // ── Smart Reminders ────────────────────────────────────────────────────────
-  const reminders: { Icon: React.ElementType; message: string; time: string; channel: string }[] = [];
-
-  if (data.policy) {
-    if (daysLeft <= 3) {
-      const expDay = new Date(data.policy.week_end).toLocaleDateString('en-IN', { weekday: 'short' });
-      reminders.push({
-        Icon: Bell,
-        message: `Your ${data.policy.name || data.policy.tier} expires ${expDay}! Renew to keep your coverage active.`,
-        time: `${expDay} 6:00 PM`,
-        channel: 'PUSH',
-      });
-    }
-  } else {
-    reminders.push({
-      Icon: Bell,
-      message: 'Get protected before the next disruption! Plans start at ₹80/week.',
-      time: 'Today · Now',
-      channel: 'PUSH',
-    });
-  }
-
-  if (rainProb > 0.3) {
-    const rainyDay = data.forecast.find((d) => d.rain_mm > 5)?.day_name ?? 'Monday';
-    reminders.push({
-      Icon: Phone,
-      message: `Rain expected ${rainyDay}! Renew now to stay covered during heavy rainfall.`,
-      time: `${rainyDay.slice(0, 3)} 10:00 AM`,
-      channel: 'SMS',
-    });
-  } else if (reminders.length < 2) {
-    reminders.push({
-      Icon: Phone,
-      message: 'Check your GigPoints — you may have rewards ready to redeem.',
-      time: 'Daily · 9:00 AM',
-      channel: 'SMS',
-    });
-  }
-
-  // Always show exactly 2
-  const displayReminders = reminders.slice(0, 2);
+  const notifCount = notifs.filter(n => n.type === 'claim').length;
 
   // ── Zone Pool (derived from available data) ────────────────────────────────
   const poolZoneName = driverZoneName;
   const poolMembers  = 28 + (Object.keys(CITY_NAMES).indexOf(data.profile.city) + 1) * 2;
-  const poolHealth   = data.zone_status === 'safe' ? t('pool.healthStrong') : data.zone_status === 'alert' ? t('pool.healthModerate') : t('pool.healthLow');
-  const poolContrib  = data.policy ? Math.round(data.policy.premium * 0.1) : 10;
-
-  // ── Filled streak count ────────────────────────────────────────────────────
-  const filledCount = Math.min(data.streak, 7);
+  const zoneRisk     = driverZone?.risk_score ?? 0;
+  const zoneRiskLabel = zoneRisk >= 0.65 ? 'High' : zoneRisk >= 0.35 ? 'Medium' : 'Low';
+  const zoneRiskColor = zoneRisk >= 0.65 ? '#EF4444' : zoneRisk >= 0.35 ? '#F59E0B' : '#22C55E';
 
   const F = "var(--font-inter),'Inter',sans-serif";
 
@@ -350,7 +361,7 @@ export default function DashboardHomePage() {
         ══════════════════════════════════════════ */}
         <div className="dsh-s" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <p style={{ fontSize: 16, color: '#6B6B6B', margin: 0, lineHeight: 1.3, fontFamily: F }}>
+            <p style={{ fontSize: 16, color: '#6B7280', margin: 0, lineHeight: 1.3, fontFamily: F }}>
               {t(getGreetingKey())},
             </p>
             <h1 style={{ fontSize: 26, fontWeight: 800, color: '#1A1A1A', margin: '4px 0 0', lineHeight: 1.2, letterSpacing: '-0.03em', fontFamily: F }}>
@@ -358,16 +369,19 @@ export default function DashboardHomePage() {
             </h1>
           </div>
 
-          <div style={{ display: 'flex', gap: 12, paddingTop: 2 }}>
-            {/* Dark mode toggle (decorative) */}
-            <button className="dsh-icon-btn" aria-label="Toggle dark mode">
-              <Moon size={20} color="#374151" strokeWidth={1.5} />
-            </button>
-
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', alignSelf: 'center' }}>
             {/* Notifications */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
-              <button className="dsh-icon-btn" aria-label="Notifications">
-                <Bell size={20} color="#374151" strokeWidth={1.5} />
+              <button className="dsh-icon-btn" aria-label="Notifications" onClick={() => {
+                setShowNotifs((prev) => !prev);
+                if (!notifsLoaded) {
+                  fetch('/api/driver/notifications').then(r => r.json()).then(d => {
+                    if (d.notifications) setNotifs(d.notifications);
+                    setNotifsLoaded(true);
+                  }).catch(() => {});
+                }
+              }}>
+                <Bell size={20} color={showNotifs ? '#F07820' : '#374151'} strokeWidth={1.5} />
               </button>
               {notifCount > 0 && (
                 <span style={{
@@ -384,8 +398,102 @@ export default function DashboardHomePage() {
                 </span>
               )}
             </div>
-          </div>
+
+            {/* Dynamic island — policy status pill */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              background: '#ffffff',
+              borderRadius: 999,
+              padding: '11px 22px 11px 16px',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+              border: '1px solid #E8E8EA',
+            }}>
+            {data.policy ? (
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                background: '#F07820',
+                boxShadow: '0 0 0 3px rgba(240,120,32,0.3)',
+                animation: 'dsh-pulse 1.5s ease-in-out infinite',
+                display: 'inline-block',
+              }} />
+            ) : (
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                background: '#6B7280',
+                display: 'inline-block',
+              }} />
+            )}
+            <span style={{
+              fontSize: 12, fontWeight: 600, letterSpacing: '0.02em',
+              color: data.policy ? '#F07820' : '#9CA3AF',
+              fontFamily: F,
+            }}>
+              {data.policy ? 'Policy Active' : 'No Active Policy'}
+            </span>
+            </div>{/* end pill */}
+          </div>{/* end right group */}
         </div>
+
+        {/* ══════════════════════════════════════════
+            1b. REMINDERS PANEL (toggle via bell)
+        ══════════════════════════════════════════ */}
+        {showNotifs && (
+          <div className="dsh-s dsh-card" style={{ animationDelay: '0.02s', padding: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <BellRing size={16} color="#F07820" strokeWidth={2} />
+                <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Notifications</span>
+              </div>
+              <button onClick={() => setShowNotifs(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}>
+                <span style={{ fontSize: 18, color: '#9CA3AF', lineHeight: 1 }}>×</span>
+              </button>
+            </div>
+
+            {/* Policy expiry reminder (always shown if active) */}
+            {data.policy && daysLeft > 0 && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10, padding: '10px 12px', background: '#FEF3E8', borderRadius: 10 }}>
+                <Shield size={16} color="#F07820" style={{ marginTop: 2, flexShrink: 0 }} />
+                <div>
+                  <p style={{ fontSize: 13, color: '#1A1A1A', margin: 0, fontWeight: 600, fontFamily: F }}>Policy expires in {daysLeft} day{daysLeft > 1 ? 's' : ''}</p>
+                  <p style={{ fontSize: 11, color: '#6B7280', margin: '2px 0 0', fontFamily: F }}>
+                    {data.policy.name || data.policy.tier} · Valid till {fmtDate(data.policy.week_end)}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Claim notifications only */}
+            {(() => {
+              const claimNotifs = notifs.filter(n => n.type === 'claim');
+              if (!notifsLoaded) return <p style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '12px 0', fontFamily: F }}>Loading...</p>;
+              if (claimNotifs.length === 0) return <p style={{ fontSize: 13, color: '#9CA3AF', textAlign: 'center', padding: '12px 0', fontFamily: F }}>No claim notifications yet</p>;
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+                  {claimNotifs.map((n, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'flex-start', gap: 10,
+                      padding: '8px 10px', borderRadius: 8,
+                      background: '#EEFBF3', border: '1px solid #B8E8C8',
+                    }}>
+                      <div style={{
+                        width: 6, height: 6, borderRadius: '50%', flexShrink: 0, marginTop: 6,
+                        background: '#22C55E',
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13, color: '#1A1A1A', margin: 0, fontFamily: F, fontWeight: 600 }}>
+                          {n.message}
+                        </p>
+                        <p style={{ fontSize: 11, color: '#9CA3AF', margin: '2px 0 0', fontFamily: F }}>
+                          {new Date(n.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {new Date(n.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
+          </div>
+        )}
 
         {/* ══════════════════════════════════════════
             2. ZONE STATUS CARD
@@ -400,57 +508,57 @@ export default function DashboardHomePage() {
             padding: 20,
           }}
         >
-          {/* Row 1: status + chevron */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {/* Single row: dot + status/city | weather metrics */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+
+            {/* Left — dot + status + city */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
               <span style={{
-                width: 12, height: 12, borderRadius: '50%',
-                background: zoneDotColor, display: 'inline-block', flexShrink: 0,
+                width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                background: zoneDotColor,
                 boxShadow: `0 0 0 3px ${zoneDotColor}2A`,
                 animation: data.zone_status !== 'safe' ? 'dsh-pulse 1.5s ease-in-out infinite' : 'none',
               }} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: zoneDotColor, fontFamily: F }}>
-                {t(`zone.${data.zone_status}`)}
-              </span>
-            </div>
-            <ChevronRight size={20} color="#9CA3AF" />
-          </div>
-
-          {/* Row 2: location */}
-          <p style={{ fontSize: 14, color: '#4B5563', margin: '0 0 16px', fontFamily: F }}>
-            {cityName} · {driverZoneName}
-          </p>
-
-          {/* Divider */}
-          <div style={{ height: 1, background: zoneDivider, marginBottom: 16 }} />
-
-          {/* Weather stats */}
-          <div style={{ display: 'flex' }}>
-            {([
-              { Icon: CloudRain,   label: t('zone.rain'), value: `${data.weather?.current_rain_mm ?? 0}mm` },
-              { Icon: Thermometer, label: t('zone.temp'), value: `${data.weather?.current_temp != null ? Math.round(data.weather.current_temp) : '--'}°C` },
-              { Icon: Wind,        label: t('zone.aqi'),  value: `${data.weather?.current_aqi  || '--'}` },
-            ] as const).map(({ Icon, label, value }, i) => (
-              <div
-                key={label}
-                style={{
-                  flex: 1, display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', gap: 4,
-                  borderRight: i < 2 ? `1px solid ${zoneStatBorder}` : 'none',
-                }}
-              >
-                <Icon size={20} color="#6B7280" strokeWidth={1.5} />
-                <span style={{ fontSize: 13, color: '#6B7280', fontFamily: F }}>{label}</span>
-                <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{value}</span>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: zoneDotColor, fontFamily: F, lineHeight: 1.2 }}>
+                  {t(`zone.${data.zone_status}`)}
+                </div>
+                <div style={{ fontSize: 12, color: '#4B5563', fontFamily: F, lineHeight: 1.2 }}>
+                  {driverZoneName !== cityName ? `${cityName} · ${driverZoneName}` : cityName}
+                </div>
               </div>
-            ))}
+            </div>
+
+            {/* Vertical divider */}
+            <div style={{ width: 1, height: 36, background: zoneDivider, flexShrink: 0 }} />
+
+            {/* Right — weather metrics */}
+            <div style={{ display: 'flex', flex: 1 }}>
+              {([
+                { Icon: CloudRain,   label: t('zone.rain'), value: `${data.weather?.current_rain_mm ?? 0}mm` },
+                { Icon: Thermometer, label: t('zone.temp'), value: `${data.weather?.current_temp != null ? Math.round(data.weather.current_temp) : '--'}°C` },
+                { Icon: Wind,        label: t('zone.aqi'),  value: `${data.weather?.current_aqi  || '--'}` },
+              ] as const).map(({ Icon, label, value }, i) => (
+                <div key={label} style={{
+                  flex: 1, display: 'flex', flexDirection: 'column',
+                  alignItems: 'center', gap: 2,
+                  borderRight: i < 2 ? `1px solid ${zoneStatBorder}` : 'none',
+                }}>
+                  <Icon size={14} color="#6B7280" strokeWidth={1.5} />
+                  <span style={{ fontSize: 11, color: '#6B7280', fontFamily: F }}>{label}</span>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{value}</span>
+                </div>
+              ))}
+            </div>
+
           </div>
         </div>
 
         {/* ══════════════════════════════════════════
-            3. ACTIVE POLICY CARD
+            3. POLICY CARD — multiple states
         ══════════════════════════════════════════ */}
         {data.policy ? (
+          /* ── STATE A: Active policy this week ── */
           <div id="card-policy" className="dsh-s dsh-card" style={{ animationDelay: '0.1s' }}>
             {/* Header row */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -493,13 +601,108 @@ export default function DashboardHomePage() {
               <span style={{ fontSize: 13, color: '#6B7280', fontFamily: F }}>{t('policy.daysRemaining', { n: daysLeft })}</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: '#F07820', fontFamily: F }}>₹{data.policy.premium}/wk</span>
             </div>
+
+            {/* Sunday: renewal for next week */}
+            {data.is_sunday_window && !data.next_week_policy && (
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid #E5E7EB' }}>
+                <Link
+                  href={`/dashboard/policy/reinstate?tier=${data.policy.tier || data.last_tier || 'normal'}`}
+                  style={{
+                    display: 'block', textAlign: 'center',
+                    background: '#F07820', color: '#fff',
+                    borderRadius: 8, padding: '10px 0', fontSize: 14, fontWeight: 700,
+                    textDecoration: 'none', fontFamily: F,
+                  }}
+                >
+                  Renew for Next Week
+                </Link>
+              </div>
+            )}
+
+            {/* Next week already paid */}
+            {data.next_week_policy && (
+              <div style={{
+                marginTop: 14, paddingTop: 14, borderTop: '1px solid #E5E7EB',
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <Check size={16} color="#22C55E" strokeWidth={3} />
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#22C55E', fontFamily: F }}>
+                  Next week premium ₹{data.next_week_policy.premium} paid
+                </span>
+              </div>
+            )}
           </div>
+
+        ) : data.next_week_policy ? (
+          /* ── STATE B: Paid but not yet active (waiting for Monday) ── */
+          <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s', textAlign: 'center', padding: '28px 20px' }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: '50%', background: '#EEF2FF',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 12px',
+            }}>
+              <Shield size={22} color="#1A40C0" strokeWidth={2} />
+            </div>
+            <p style={{ fontSize: 16, fontWeight: 700, color: '#1A40C0', marginBottom: 4, fontFamily: F }}>
+              Policy Paid — Activates {(() => {
+                const start = new Date(data.next_week_policy.week_start);
+                const now = new Date();
+                const diff = Math.ceil((start.getTime() - now.getTime()) / 86400000);
+                return diff <= 1 ? 'Tomorrow' : `in ${diff} days`;
+              })()}
+            </p>
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 4, fontFamily: F }}>
+              {data.next_week_policy.name || data.next_week_policy.tier} plan · ₹{data.next_week_policy.premium}/wk
+            </p>
+            <p style={{ fontSize: 12, color: '#9CA3AF', fontFamily: F }}>
+              Starts {new Date(data.next_week_policy.week_start).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
+            </p>
+          </div>
+
+        ) : data.is_sunday_window && data.last_tier ? (
+          /* ── STATE C: Sunday window open, user has expired policy ── */
+          <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s', textAlign: 'center', padding: '28px 20px' }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#F07820', marginBottom: 4, fontFamily: F }}>
+              Renewal Window Open
+            </p>
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, fontFamily: F }}>
+              Reinstate your {data.last_tier} plan before midnight to stay covered next week.
+            </p>
+            <Link
+              href={`/dashboard/policy/reinstate?tier=${data.last_tier}`}
+              style={{
+                display: 'inline-block', background: '#F07820', color: '#fff',
+                borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 700,
+                textDecoration: 'none', fontFamily: F,
+              }}
+            >
+              Reinstate Policy
+            </Link>
+          </div>
+
+        ) : data.last_tier ? (
+          /* ── STATE D: Not Sunday, has expired policy — show next window date ── */
+          <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s', textAlign: 'center', padding: '28px 20px' }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: '#EF4444', marginBottom: 4, fontFamily: F }}>
+              Policy Inactive
+            </p>
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 8, fontFamily: F }}>
+              You can reinstate your policy on the next payment window.
+            </p>
+            {data.next_renewal_date && (
+              <p style={{ fontSize: 14, fontWeight: 600, color: '#1A40C0', fontFamily: F }}>
+                Next window: Sunday, {new Date(data.next_renewal_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+              </p>
+            )}
+          </div>
+
         ) : (
+          /* ── STATE E: Brand new user, never had a policy ── */
           <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s', textAlign: 'center', padding: '28px 20px' }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: '#F07820', marginBottom: 4, fontFamily: F }}>{t('policy.none')}</p>
             <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, fontFamily: F }}>{t('policy.noneDesc')}</p>
             <Link
-              href="/onboarding"
+              href="/dashboard/policy/purchase"
               style={{
                 display: 'inline-block', background: '#F07820', color: '#fff',
                 borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 700,
@@ -516,7 +719,7 @@ export default function DashboardHomePage() {
         ══════════════════════════════════════════ */}
         <div
           className="dsh-s dsh-card"
-          style={{ animationDelay: '0.15s', padding: '20px 20px 0', overflow: 'hidden' }}
+          style={{ animationDelay: '0.15s', padding: 20 }}
         >
           {/* Header */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -524,23 +727,10 @@ export default function DashboardHomePage() {
               <TrendingUp size={18} color="#1A40C0" strokeWidth={2} />
               <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('forecast.title')}</span>
             </div>
-            <span style={{
-              fontSize: 12, fontWeight: 600, color: '#EA580C',
-              background: '#FFF3E6', border: '1px solid #FDBA74',
-              borderRadius: 20, padding: '4px 12px', fontFamily: F,
-              whiteSpace: 'nowrap',
-            }}>
-              +{forecastIncrease}% by {forecastDayName}
-            </span>
           </div>
 
-          {/* Description */}
-          <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.55, margin: '0 0 16px', fontFamily: F }}>
-            {forecastDesc}
-          </p>
-
           {/* Sparkline — bleeds to card edges */}
-          <div style={{ background: '#EEF2FF', marginLeft: -20, marginRight: -20 }}>
+          <div style={{ background: '#EEF2FF', margin: '0 -20px -20px' }}>
             <ForecastSparkline forecast={data.forecast} />
           </div>
         </div>
@@ -552,11 +742,11 @@ export default function DashboardHomePage() {
           className="dsh-s"
           style={{ animationDelay: '0.2s', display: 'flex', gap: 14, alignItems: 'stretch' }}
         >
-          {/* GigPoints card */}
-          <div id="card-gigpoints" className="dsh-card" style={{ flex: 1 }}>
+          {/* SafeShift Coins card */}
+          <div id="card-coins" className="dsh-card" style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <Award size={18} color="#9CA3AF" strokeWidth={1.5} />
-              <span style={{ fontSize: 14, color: '#4B5563', fontFamily: F }}>{t('stats.gigpoints')}</span>
+              <Coins size={18} color="#F07820" strokeWidth={1.5} />
+              <span style={{ fontSize: 14, color: '#4B5563', fontFamily: F }}>SafeShift Coins</span>
             </div>
             <p style={{ fontSize: 34, fontWeight: 800, color: '#F07820', letterSpacing: '-0.03em', lineHeight: 1, margin: '0 0 8px', fontFamily: F }}>
               {Number(data.coins.balance).toLocaleString('en-IN')}
@@ -567,389 +757,192 @@ export default function DashboardHomePage() {
             </div>
           </div>
 
-          {/* Net Savings card */}
-          <div id="card-savings" style={{
+          {/* Total Payouts card */}
+          <div id="card-payouts" style={{
             flex: 1,
             background: 'linear-gradient(135deg, #F07820, #c95e10)',
             borderRadius: 16, padding: 20,
             display: 'flex', flexDirection: 'column',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
-              <TrendingUp size={16} color="rgba(255,255,255,0.85)" strokeWidth={2} />
-              <span style={{ fontSize: 14, color: '#fff', fontFamily: F }}>{t('stats.netSavings')}</span>
+              <CreditCard size={16} color="rgba(255,255,255,0.85)" strokeWidth={2} />
+              <span style={{ fontSize: 14, color: '#fff', fontFamily: F }}>Total Payouts</span>
             </div>
             <p style={{ fontSize: 34, fontWeight: 800, color: '#fff', letterSpacing: '-0.03em', lineHeight: 1, margin: '0 0 8px', fontFamily: F }}>
               ₹{Number(data.wallet.total_earned).toLocaleString('en-IN')}
             </p>
-            {roiPct !== null ? (
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', fontFamily: F }}>{roiPct}% ROI</span>
-            ) : (
-              <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', fontFamily: F }}>{t('stats.noClaims')}</span>
-            )}
+            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', fontFamily: F }}>
+              {data.wallet.total_claims > 0 ? `${data.wallet.total_claims} claim${data.wallet.total_claims > 1 ? 's' : ''} paid` : 'No claims yet'}
+            </span>
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════
-            6. STREAK CARD
-        ══════════════════════════════════════════ */}
-        <div className="dsh-s dsh-card" style={{ animationDelay: '0.25s' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Flame size={18} color="#F59E0B" strokeWidth={2} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>
-                {data.streak > 0 ? t('streak.title', { n: data.streak }) : t('streak.start')}
-              </span>
-            </div>
-            <span style={{ fontSize: 14, color: '#6B7280', fontFamily: F }}>{t('streak.ptsWeek')}</span>
-          </div>
 
-          <div style={{ display: 'flex', gap: 6 }}>
-            {Array.from({ length: 8 }).map((_, i) => {
-              if (i === 7) {
-                return (
-                  <div key={i} style={{
-                    flex: 1, height: 36, borderRadius: 10,
-                    border: '1.5px dashed #C0C0C8', background: 'transparent',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: '#9CA3AF', fontFamily: F }}>W8</span>
-                  </div>
-                );
-              }
-              const filled = i < filledCount;
-              return (
-                <div key={i} style={{
-                  flex: 1, height: 36, borderRadius: 10,
-                  background: filled ? STREAK_COLORS[i] : '#F3F4F6',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {filled
-                    ? <Check size={14} color="#fff" strokeWidth={3} />
-                    : <span style={{ fontSize: 11, fontWeight: 600, color: '#D1D5DB', fontFamily: F }}>W{i + 1}</span>
-                  }
-                </div>
-              );
-            })}
-          </div>
-        </div>
 
         {/* ══════════════════════════════════════════
-            7. SMART REMINDERS CARD
-        ══════════════════════════════════════════ */}
-        <div className="dsh-s dsh-card" style={{ animationDelay: '0.3s' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <BellRing size={18} color="#F07820" strokeWidth={2} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('reminders.title')}</span>
-            </div>
-            <span style={{
-              fontSize: 12, fontWeight: 600, color: '#7C3AED',
-              background: '#EDE9FE', border: '1px solid #C4B5FD',
-              borderRadius: 20, padding: '4px 14px', fontFamily: F,
-            }}>{t('reminders.aiPowered')}</span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {displayReminders.map((r, i) => {
-              const RIcon = r.Icon;
-              return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: '50%', flexShrink: 0,
-                    background: '#FEF3E8',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <RIcon size={18} color="#F07820" strokeWidth={1.8} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{
-                      fontSize: 14, color: '#374151', margin: '0 0 2px', fontFamily: F,
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-                    }}>{r.message}</p>
-                    <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, fontFamily: F }}>
-                      {r.time} · {r.channel}
-                    </p>
-                  </div>
-                  <Check size={16} color="#22C55E" strokeWidth={2.5} style={{ flexShrink: 0 }} />
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            8. QUICK ACTIONS CARD
-        ══════════════════════════════════════════ */}
-        <div className="dsh-s dsh-card" style={{ animationDelay: '0.35s' }}>
-          <p style={{
-            fontSize: 13, fontWeight: 600, color: '#6B7280',
-            textTransform: 'uppercase', letterSpacing: '1px',
-            margin: '0 0 16px', fontFamily: F,
-          }}>
-            {t('actions.title')}
-          </p>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 8 }}>
-            {([
-              { label: t('actions.claims'),  Icon: ClipboardCheck, color: '#F07820', bg: '#FEF3E8', href: '/dashboard/claims'  },
-              { label: t('actions.wallet'),  Icon: CreditCard,     color: '#1A40C0', bg: '#EEF2FF', href: '/dashboard/wallet'  },
-              { label: t('actions.rewards'), Icon: Users,          color: '#0EA5E9', bg: '#E0F2FE', href: '/dashboard/rewards' },
-              { label: t('actions.help'),    Icon: Headphones,     color: '#F59E0B', bg: '#FEF3C7', href: '/contact'           },
-            ] as const).map(({ label, Icon, color, bg, href }) => (
-              <Link key={label} href={href} style={{ textDecoration: 'none' }}>
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-                  <div style={{
-                    width: 56, height: 56, borderRadius: 14,
-                    background: bg,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  }}>
-                    <Icon size={24} color={color} strokeWidth={1.8} />
-                  </div>
-                  <span style={{ fontSize: 13, color: '#4B5563', fontFamily: F }}>{label}</span>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            9. ZONE POOL CARD
+            RECENT ACTIVITY CARD
         ══════════════════════════════════════════ */}
         <div className="dsh-s dsh-card" style={{ animationDelay: '0.4s' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Users2 size={18} color="#F07820" strokeWidth={1.8} />
-              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{t('pool.title')}</span>
-            </div>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#F07820', fontFamily: F }}>{poolZoneName}</span>
-          </div>
-
-          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
-            {([
-              { value: String(poolMembers),                                           label: t('pool.members')  },
-              { value: `₹${(poolMembers * poolContrib).toLocaleString('en-IN')}`,    label: t('pool.balance')  },
-              { value: poolHealth,                                                     label: t('pool.health')   },
-            ] as const).map(({ value, label }) => (
-              <div key={label} style={{
-                flex: 1, background: '#FEF3E8',
-                borderRadius: 12, padding: '12px 8px', textAlign: 'center',
-              }}>
-                <p style={{ fontSize: 20, fontWeight: 700, color: '#F07820', lineHeight: 1, margin: '0 0 4px', fontFamily: F }}>
-                  {value}
-                </p>
-                <p style={{ fontSize: 12, color: '#6B7280', margin: 0, fontFamily: F }}>{label}</p>
-              </div>
-            ))}
-          </div>
-
-          <p style={{ fontSize: 13, color: '#6B7280', margin: 0, lineHeight: 1.4, fontFamily: F }}>
-            {t('pool.contribution', { n: poolContrib })}
-          </p>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            10. TODAY'S ACTIVITY CARD
-        ══════════════════════════════════════════ */}
-        <div className="dsh-s dsh-card" style={{ animationDelay: '0.45s' }}>
-          {/* Header */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: 0, fontFamily: F }}>
-              {t('activity.title')}
-            </p>
-            <span style={{ fontSize: 14, color: '#7C3AED', cursor: 'pointer', fontFamily: F }}>{t('activity.seeAll')}</span>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {/* Row 1 — Rainfall / alert trigger */}
-            {(() => {
-              const hasAlert = data.alerts.length > 0;
-              const alertLabel = hasAlert ? (data.alerts[0].event_type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())) : t('activity.rainfallTrigger');
-              const alertPayout = data.policy ? Math.round(data.policy.max_payout * 0.5) : 600;
-              return (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#EDE9FE', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <CloudRain size={20} color="#7C3AED" strokeWidth={1.8} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A', margin: '0 0 2px', fontFamily: F }}>{alertLabel}</p>
-                    <p style={{ fontSize: 13, color: '#9CA3AF', margin: 0, fontFamily: F }}>
-                      {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {cityName}
-                    </p>
-                  </div>
-                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: '#F07820', margin: '0 0 2px', fontFamily: F }}>+₹{alertPayout}</p>
-                    <p style={{ fontSize: 12, color: '#7C3AED', margin: 0, fontFamily: F }}>+200 pts</p>
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Divider */}
-            <div style={{ height: 1, background: '#F3F4F6' }} />
-
-            {/* Row 2 — Policy Active */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#FEF3E8', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Shield size={20} color="#F07820" strokeWidth={1.8} />
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 15, fontWeight: 600, color: '#1A1A1A', margin: '0 0 2px', fontFamily: F }}>{t('activity.policyActive')}</p>
-                <p style={{ fontSize: 13, color: '#9CA3AF', margin: 0, fontFamily: F }}>
-                  {new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · {data.policy?.name || data.policy?.tier || 'No Plan'}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            11. COVERAGE GAP ALERT CARD
-        ══════════════════════════════════════════ */}
-        <div className="dsh-s" style={{
-          animationDelay: '0.5s',
-          background: '#FFF5EB', border: '1.5px solid #FED7AA',
-          borderRadius: 16, padding: 20,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-            {/* Warning icon */}
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#FFE4CC', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertTriangle size={22} color="#F97316" strokeWidth={2} />
-            </div>
-            {/* Content */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: '#F97316', margin: '0 0 6px', fontFamily: F }}>{t('gap.title')}</p>
-              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.5, margin: '0 0 14px', fontFamily: F }}>
-                {t('gap.desc', { n: poolMembers })}
-              </p>
-              <button style={{
-                background: 'linear-gradient(to right, #F07820, #d96010)',
-                color: '#fff', border: 'none', cursor: 'pointer',
-                fontSize: 14, fontWeight: 600, padding: '12px 24px',
-                borderRadius: 24, fontFamily: F,
-              }}>
-                {t('gap.autoRenew')}
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            12. EMERGENCY SOS CARD
-        ══════════════════════════════════════════ */}
-        <div className="dsh-s dsh-card" style={{ animationDelay: '0.55s' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            {/* Heart icon */}
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: '#FEE2E2', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <HeartPulse size={22} color="#EF4444" strokeWidth={2} />
-            </div>
-            {/* Text */}
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', margin: '0 0 3px', fontFamily: F }}>{t('sos.title')}</p>
-              <p style={{ fontSize: 14, color: '#6B7280', lineHeight: 1.4, margin: 0, fontFamily: F }}>
-                {t('sos.desc')}
-              </p>
-            </div>
-            {/* SOS button */}
-            <button style={{
-              border: '1.5px solid #FECACA', background: '#FFF1F2',
-              borderRadius: 12, padding: '10px 18px', cursor: 'pointer', flexShrink: 0,
-            }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: '#F87171', fontFamily: F }}>{t('sos.btn')}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            13. LIVE WEATHER RADAR CARD
-        ══════════════════════════════════════════ */}
-        <div className="dsh-s dsh-card" style={{ animationDelay: '0.6s' }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 16px', fontFamily: F }}>
-            {t('radar.title')}
+          <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>
+            Recent Activity
           </p>
 
-          {/* 4 time slots */}
           {(() => {
-            const baseRain = data.weather?.current_rain_mm ?? 0;
-            const slots = [
-              { time: '1PM', rain: Math.max(0, baseRain + 3),  IconComp: Sun,          iconColor: '#FBBF24', highlight: false, border: false },
-              { time: '2PM', rain: Math.max(0, baseRain + 8),  IconComp: Cloud,        iconColor: '#94A3B8', highlight: false, border: false },
-              { time: '3PM', rain: Math.max(0, baseRain + 14), IconComp: CloudDrizzle, iconColor: '#60A5FA', highlight: true,  border: false },
-              { time: '4PM', rain: Math.max(0, baseRain + 19), IconComp: CloudRain,    iconColor: '#3B82F6', highlight: false, border: true  },
-            ];
+            const activityItems = notifs.filter(n => n.type === 'coin' || n.type === 'policy');
+            if (!notifsLoaded) return <p style={{ fontSize: 13, color: '#9CA3AF', fontFamily: F }}>Loading...</p>;
+            if (activityItems.length === 0) return <p style={{ fontSize: 13, color: '#9CA3AF', fontFamily: F }}>No activity yet</p>;
             return (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                {slots.map(({ time, rain, IconComp, iconColor, highlight, border }) => (
-                  <div key={time} style={{
-                    flex: 1, display: 'flex', flexDirection: 'column',
-                    alignItems: 'center', gap: 6, padding: '10px 4px',
-                    borderRadius: 12,
-                    background: border ? '#FFF3E6' : highlight ? '#FEF9E7' : 'transparent',
-                    border: border ? '1.5px solid #FDBA74' : 'none',
-                  }}>
-                    <span style={{ fontSize: 13, color: border ? '#F97316' : highlight ? '#B45309' : '#6B7280', fontFamily: F }}>{time}</span>
-                    <IconComp size={28} color={iconColor} strokeWidth={1.5} />
-                    <span style={{
-                      fontSize: 15, fontWeight: 700, fontFamily: F,
-                      color: border ? '#F97316' : highlight ? '#F59E0B' : '#1A1A1A',
-                    }}>{rain.toFixed(0)}mm</span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxHeight: 280, overflowY: 'auto' }}>
+                {activityItems.map((item, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%', flexShrink: 0, marginTop: 2,
+                      background: item.type === 'coin' ? '#FEF3E8' : '#EEF2FF',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      {item.type === 'coin'
+                        ? <Coins size={16} color="#F07820" strokeWidth={1.8} />
+                        : <Shield size={16} color="#1A40C0" strokeWidth={1.8} />}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, color: '#1A1A1A', margin: 0, lineHeight: 1.4, fontFamily: F }}>
+                        {item.message}
+                      </p>
+                      <p style={{ fontSize: 11, color: '#9CA3AF', margin: '2px 0 0', fontFamily: F }}>
+                        {new Date(item.timestamp).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} · {new Date(item.timestamp).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
             );
           })()}
-
-          {/* Warning footer */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <AlertTriangle size={14} color="#F59E0B" strokeWidth={2} />
-            <span style={{ fontSize: 13, color: '#D97706', fontFamily: F }}>{t('radar.triggerWarning')}</span>
-          </div>
         </div>
 
         {/* ══════════════════════════════════════════
-            14. EARNINGS IMPACT CARD
+            LIVE WEATHER — 24hr scrollable
         ══════════════════════════════════════════ */}
-        <div className="dsh-s dsh-card" style={{ animationDelay: '0.65s' }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>
-            {t('earnings.title')}
-          </p>
-
-          {/* Comparison row */}
-          <div style={{ display: 'flex', alignItems: 'stretch', marginBottom: 16 }}>
-            {/* Left: without coverage */}
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px', fontFamily: F }}>{t('earnings.without')}</p>
-              <p style={{ fontSize: 30, fontWeight: 800, color: '#F87171', lineHeight: 1, margin: '0 0 4px', letterSpacing: '-0.03em', fontFamily: F }}>
-                -₹{(data.wallet.total_earned + (data.policy?.premium ?? 100)).toLocaleString('en-IN')}
-              </p>
-              <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, fontFamily: F }}>{t('earnings.lost')}</p>
+        <div className="dsh-s dsh-card" style={{ animationDelay: '0.45s', padding: '20px 20px 16px' }}>
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <CloudRain size={16} color="#F07820" strokeWidth={2} />
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>24-Hour Forecast</span>
             </div>
-
-            {/* Vertical divider */}
-            <div style={{ width: 1, background: '#E5E7EB', margin: '0 16px', alignSelf: 'stretch' }} />
-
-            {/* Right: with coverage */}
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 13, color: '#6B7280', margin: '0 0 6px', fontFamily: F }}>{t('earnings.with')}</p>
-              <p style={{ fontSize: 30, fontWeight: 800, color: '#F07820', lineHeight: 1, margin: '0 0 4px', letterSpacing: '-0.03em', fontFamily: F }}>
-                +₹{Number(data.wallet.total_earned).toLocaleString('en-IN')}
-              </p>
-              <p style={{ fontSize: 12, color: '#9CA3AF', margin: 0, fontFamily: F }}>{t('earnings.protected')}</p>
-            </div>
+            <span style={{ fontSize: 12, color: '#9CA3AF', fontFamily: F }}>{cityName}</span>
           </div>
 
-          {/* Progress bar */}
-          <div style={{ height: 8, borderRadius: 4, background: '#E5E7EB', overflow: 'hidden', marginBottom: 10 }}>
-            <div style={{
-              width: '85%', height: '100%', borderRadius: 4,
-              background: 'linear-gradient(to right, #F07820, #1A40C0)',
-              transition: 'width 0.6s ease',
-            }} />
-          </div>
+          {/* Current conditions summary */}
+          {data.weather && (
+            <div style={{ display: 'flex', gap: 16, marginBottom: 16, padding: '12px 14px', background: '#FEF3E8', borderRadius: 12, border: '1px solid #F5C49A' }}>
+              <div>
+                <span style={{ fontSize: 32, fontWeight: 800, color: '#F07820', fontFamily: F }}>{data.weather.current_temp != null ? Math.round(data.weather.current_temp) : '--'}°</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 2 }}>
+                <span style={{ fontSize: 12, color: '#6B7280', fontFamily: F }}>Rain: {data.weather.current_rain_mm ?? 0}mm</span>
+                <span style={{ fontSize: 12, color: '#6B7280', fontFamily: F }}>AQI: {data.weather.current_aqi || '--'}</span>
+              </div>
+            </div>
+          )}
 
-          {/* Footer */}
-          <p style={{ fontSize: 13, color: '#F07820', margin: 0, lineHeight: 1.4, fontFamily: F }}>
-            {t('earnings.top')}
-          </p>
+          {(() => {
+            const hours = data.hourly ?? [];
+            if (hours.length === 0) return <p style={{ fontSize: 13, color: '#9CA3AF', fontFamily: F }}>Weather data loading...</p>;
+
+            const nowHour = new Date().getHours();
+
+            function weatherIcon(code: number, hour: number) {
+              const isNight = hour < 6 || hour >= 20;
+              if (code >= 61) return { Icon: CloudRain, color: '#3B82F6' };
+              if (code >= 51) return { Icon: CloudDrizzle, color: '#60A5FA' };
+              if (code >= 3)  return { Icon: Cloud, color: '#94A3B8' };
+              return { Icon: isNight ? Cloud : Sun, color: isNight ? '#94A3B8' : '#FBBF24' };
+            }
+
+            return (
+              <div style={{ overflowX: 'auto', margin: '0 -20px', padding: '0 20px' }}>
+                <div style={{ display: 'flex', gap: 6, minWidth: hours.length * 64 }}>
+                  {hours.map((h) => {
+                    const isCurrent = h.hour === nowHour;
+                    const { Icon: WIcon, color: wColor } = weatherIcon(h.weather_code, h.hour);
+                    const label = h.hour === 0 ? '12AM' : h.hour < 12 ? `${h.hour}AM` : h.hour === 12 ? '12PM' : `${h.hour - 12}PM`;
+
+                    return (
+                      <div key={h.time} style={{
+                        flex: '0 0 58px', display: 'flex', flexDirection: 'column',
+                        alignItems: 'center', gap: 6, padding: '10px 4px 8px',
+                        borderRadius: 14,
+                        background: isCurrent ? '#FEF3E8' : '#ffffff',
+                        border: `1.5px solid ${isCurrent ? '#F07820' : '#F5C49A'}`,
+                      }}>
+                        <span style={{
+                          fontSize: 10, fontWeight: isCurrent ? 700 : 500, letterSpacing: '0.02em',
+                          color: isCurrent ? '#F07820' : '#9CA3AF', fontFamily: F,
+                        }}>{isCurrent ? 'NOW' : label}</span>
+                        <WIcon size={20} color={isCurrent ? '#F07820' : wColor} strokeWidth={1.5} />
+                        <span style={{
+                          fontSize: 14, fontWeight: 700, fontFamily: F,
+                          color: isCurrent ? '#F07820' : '#1A1A1A',
+                        }}>
+                          {Math.round(h.temp)}°
+                        </span>
+                        {h.rain_mm > 0 && (
+                          <span style={{ fontSize: 9, color: '#3B82F6', fontWeight: 600, fontFamily: F }}>
+                            {h.rain_mm.toFixed(1)}mm
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })()}
         </div>
+
+        {/* ══════════════════════════════════════════
+            ZONE MAP CARD (was Zone Pool)
+        ══════════════════════════════════════════ */}
+        <div className="dsh-s dsh-card" style={{ animationDelay: '0.5s' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Users2 size={18} color="#F07820" strokeWidth={1.8} />
+              <span style={{ fontSize: 18, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Your Zone</span>
+            </div>
+            <span style={{ fontSize: 14, fontWeight: 600, color: '#F07820', fontFamily: F }}>{poolZoneName}</span>
+          </div>
+
+          {/* Stats row: Members, Risk Level, Claims */}
+          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+            {([
+              { value: String(poolMembers), label: 'Members', color: '#22C55E' },
+              { value: zoneRiskLabel, label: 'Risk Level', color: zoneRiskColor },
+              { value: String(data.zone_claims), label: 'Claims Paid', color: '#22C55E' },
+            ]).map(({ value, label, color }) => (
+              <div key={label} style={{
+                flex: 1, background: '#FEF3E8',
+                borderRadius: 12, padding: '12px 8px', textAlign: 'center',
+              }}>
+                <p style={{ fontSize: 20, fontWeight: 700, color, lineHeight: 1, margin: '0 0 4px', fontFamily: F }}>
+                  {value}
+                </p>
+                <p style={{ fontSize: 11, color: '#6B7280', margin: 0, fontFamily: F }}>{label}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Interactive OpenStreetMap */}
+          {data.city_coords && (
+            <div style={{ borderRadius: 12, overflow: 'hidden', height: 220, border: '1px solid #E8E8EA' }}>
+              <iframe
+                src={`https://www.openstreetmap.org/export/embed.html?bbox=${data.city_coords.lng - 0.08},${data.city_coords.lat - 0.05},${data.city_coords.lng + 0.08},${data.city_coords.lat + 0.05}&layer=mapnik&marker=${data.city_coords.lat},${data.city_coords.lng}`}
+                style={{ width: '100%', height: '100%', border: 'none' }}
+                title="Zone map"
+              />
+            </div>
+          )}
+        </div>
+
 
       </div>
 

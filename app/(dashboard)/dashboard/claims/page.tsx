@@ -99,14 +99,14 @@ function bucketStatus(status: string): StatusBucket {
 
 const STATUS_BADGE_STYLES: Record<StatusBucket, React.CSSProperties> = {
   paid: {
-    color: 'var(--teal)',
-    border: '1px solid var(--teal)',
-    background: 'var(--teal-bg)',
+    color: '#F07820',
+    border: '1px solid #F07820',
+    background: 'rgba(240,120,32,0.08)',
   },
   pending: {
-    color: '#b45309',
-    border: '1px solid #d97706',
-    background: 'rgba(217,119,6,0.06)',
+    color: '#D96A10',
+    border: '1px solid #F07820',
+    background: 'rgba(240,120,32,0.06)',
   },
   rejected: {
     color: 'var(--red-acc)',
@@ -123,8 +123,8 @@ function statusLabel(status: string): string {
 }
 
 const TIMELINE_DOT_COLOR: Record<StatusBucket, string> = {
-  paid: 'var(--teal)',
-  pending: '#d97706',
+  paid: '#F07820',
+  pending: '#F07820',
   rejected: 'var(--red-acc)',
 };
 
@@ -379,7 +379,7 @@ export default function ClaimsPage() {
             height="48"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="var(--teal)"
+            stroke="#F07820"
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -441,12 +441,12 @@ export default function ClaimsPage() {
         <StatCard
           label="Received"
           value={`\u20B9${totalReceived.toLocaleString('en-IN')}`}
-          accent="var(--teal)"
+          accent="#F07820"
         />
         <StatCard
           label="Success Rate"
           value={`${successRate}%`}
-          accent={successRate >= 80 ? 'var(--teal)' : successRate >= 50 ? '#b45309' : 'var(--red-acc)'}
+          accent={successRate >= 80 ? '#F07820' : successRate >= 50 ? '#D96A10' : 'var(--red-acc)'}
         />
       </div>
 
@@ -653,7 +653,7 @@ function FeaturedClaimCard({ claim }: { claim: ClaimRow }) {
   const triggerThresh = claim.live_disruption_events?.trigger_threshold ?? triggerCfg?.threshold;
   const unit = triggerCfg?.unit || '';
 
-  const borderColor = bucket === 'paid' ? 'var(--teal)' : bucket === 'rejected' ? 'var(--red-acc)' : '#d97706';
+  const borderColor = bucket === 'paid' ? '#F07820' : bucket === 'rejected' ? 'var(--red-acc)' : '#F07820';
 
   const gate1 = claim.gate1_passed;
   const gate2 = claim.gate2_passed;
@@ -679,7 +679,7 @@ function FeaturedClaimCard({ claim }: { claim: ClaimRow }) {
         borderLeft: `3px solid ${borderColor}`,
         borderRadius: 12,
         padding: '18px 16px',
-        background: 'linear-gradient(135deg, rgba(13,148,136,0.03) 0%, transparent 60%)',
+        background: 'linear-gradient(135deg, rgba(240,120,32,0.03) 0%, transparent 60%)',
       }}
     >
       {/* Header: claim ID + status */}
@@ -770,7 +770,7 @@ function FeaturedClaimCard({ claim }: { claim: ClaimRow }) {
             }}
           >
             {v.passed === true ? (
-              <CheckIcon color="var(--teal)" />
+              <CheckIcon color="#F07820" />
             ) : v.passed === false ? (
               <CheckIcon color="var(--red-acc)" />
             ) : (
@@ -848,7 +848,7 @@ function AutoRenewCard({
             borderRadius: 12,
             border: 'none',
             cursor: 'pointer',
-            background: autoRenew ? 'var(--teal)' : 'var(--ink-10)',
+            background: autoRenew ? '#F07820' : 'var(--ink-10)',
             position: 'relative',
             transition: 'background 0.2s',
           }}
@@ -876,7 +876,7 @@ function AutoRenewCard({
             width: 8,
             height: 8,
             borderRadius: '50%',
-            background: upiVerified ? 'var(--teal)' : 'var(--ink-30)',
+            background: upiVerified ? '#F07820' : 'var(--ink-30)',
             display: 'inline-block',
           }}
         />

@@ -4,7 +4,6 @@ import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import {
   motion, useInView, useScroll, useTransform, AnimatePresence,
-  type MotionValue,
 } from 'framer-motion';
 import {
   CloudRain, Wind, Factory, Ban, Wifi,
@@ -136,18 +135,10 @@ type WeatherItem = {
   emoji: string; wind: number; rain: number;
 };
 
-function WordFill({ word, progress, start, end }: {
-  word: string;
-  progress: MotionValue<number>;
-  start: number;
-  end: number;
-}) {
-  const color = useTransform(progress, [start, end], ['rgba(30,58,95,0.18)', '#1E3A5F']);
-  return <motion.span style={{ color, display:'inline' }}>{word}</motion.span>;
-}
 
 export default function LandingPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(0);
   const [mounted, setMounted] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -179,10 +170,6 @@ export default function LandingPage() {
   const coverageCounterRotation = useTransform(coverageProgress, [0.15, 0.7], [0, -72]);
 
   const testimonialRef = useRef<HTMLElement>(null);
-  const { scrollYProgress: testimonialProgress } = useScroll({
-    target: testimonialRef,
-    offset: ['start 80%', 'center center'],
-  });
 
   useEffect(() => {
     setMounted(true);
@@ -395,6 +382,13 @@ export default function LandingPage() {
         * { -webkit-tap-highlight-color: transparent; }
         input, button, a, select, textarea { touch-action: manipulation; }
 
+        /* ── TABLET  ≤ 1024px ── */
+        @media (max-width:1024px) {
+          .ss-testimonial { min-height:auto !important; }
+          .ss-testimonial-img { flex:0 0 50% !important; }
+          .ss-testimonial-text { margin-left:0 !important; padding:32px 24px !important; }
+        }
+
         /* ── TABLET / MOBILE  ≤ 768px ── */
         @media (max-width:768px) {
           /* Navbar */
@@ -425,9 +419,10 @@ export default function LandingPage() {
           .ss-coverage-mobile { display:grid !important; }
 
           /* Testimonial */
-          .ss-testimonial { flex-direction:column !important; min-height:auto !important; }
-          .ss-testimonial-img { flex:0 0 260px !important; }
-          .ss-testimonial-text { margin-left:0 !important; padding:36px 24px !important; }
+          .ss-testimonial { flex-direction:column !important; min-height:auto !important; margin-top:40px !important; }
+          .ss-testimonial-img { display:none !important; }
+          .ss-testimonial-text { margin-left:0 !important; padding:8px 24px 0px !important; background:transparent !important; }
+          .ss-testimonial-mobile-text { display:block !important; }
 
           /* Learn */
           .ss-learn-section { padding:56px 20px !important; }
@@ -1181,87 +1176,107 @@ export default function LandingPage() {
         ════════════════════════════════════════ */}
         <section ref={testimonialRef} className="ss-testimonial" style={{ display:'flex', minHeight:440 }}>
 
-          {/* Left — image */}
+          {/* Left — image with text */}
           <div className="ss-testimonial-img" style={{
             flex:'0 0 65%',
             backgroundImage:"url('/porter_ack.jpg')",
             backgroundSize:'cover', backgroundPosition:'center',
-          }} />
+            position:'relative', display:'flex', alignItems:'flex-end',
+          }}>
+            <div style={{ padding:'28px 32px' }}>
+              <p style={{
+                margin:'0 0 6px 0',
+                fontSize:12, fontWeight:600, letterSpacing:'0.12em',
+                textTransform:'uppercase', color:C.orange,
+                fontFamily:"var(--font-inter),'Inter',sans-serif",
+              }}>Exclusive Interview</p>
+              <p style={{
+                margin:0,
+                fontSize:'clamp(1.1rem,1.6vw,1.4rem)', fontWeight:700,
+                color:'#1E3A5F', lineHeight:1.3,
+                fontFamily:"var(--font-inter),'Inter',sans-serif",
+              }}>
+                Hear directly from Porter LCV<br/>delivery partners who tried it first.
+              </p>
+            </div>
+          </div>
 
-          {/* Right — text */}
+          {/* Right — video */}
+          {/* To change the video start time: edit ?start=N (N = seconds into the video)        */}
+          {/* To change the thumbnail: take a screenshot of the desired frame, save it to        */}
+          {/*   /public/video-thumbnail.jpg, then update the backgroundImage src below.          */}
           <div className="ss-testimonial-text" style={{
             flex:1, background:'#b5c8fb',
-            display:'flex', alignItems:'flex-start', justifyContent:'flex-start',
-            padding:'92px 40px 48px 0px',
+            display:'flex', flexDirection:'column', alignItems:'flex-start', justifyContent:'center',
+            padding:'32px 32px 32px 0px',
             marginLeft:'-178px', position:'relative', zIndex:1,
           }}>
             <div style={{ width:'100%' }}>
 
-              {/* Quote text — word-by-word fill on scroll */}
-              {(() => {
-                const quoteWords = '\u201cSafeShift will help me stop worrying about rain days. When bad weather hits, I lose everything. At least now I know a payout will come automatically.\u201d'.split(' ');
-                const total = quoteWords.length;
-                return (
-                  <p style={{
-                    fontSize:'clamp(1.3rem,2.1vw,1.8rem)', fontWeight:700,
-                    lineHeight:1.5,
-                    fontFamily:"var(--font-inter),'Inter',sans-serif",
-                    marginBottom:24,
-                  }}>
-                    {quoteWords.map((word, i) => {
-                      const start = i / total;
-                      const end   = Math.min((i + 3) / total, 1);
-                      return (
-                        <WordFill key={i} word={word + (i < total - 1 ? ' ' : '')} progress={testimonialProgress} start={start} end={end} />
-                      );
-                    })}
-                  </p>
-                );
-              })()}
-
-              {/* Video link */}
-              <a
-                href="https://drive.google.com/file/d/1q6mw7LurgFKOiukUnZhVu7krQ9sDTXAm/view?usp=sharing"
-                target="_blank" rel="noopener noreferrer"
-                className="ss-watch-link"
-                style={{
-                  display:'inline-flex', alignItems:'center', gap:8,
-                  fontSize:16, fontWeight:600, color:'#1E3A5F',
-                  textDecoration:'none', marginBottom:24,
-                  paddingBottom:2,
+              {/* Mobile-only text (hidden on desktop, shown when left image is hidden) */}
+              <div className="ss-testimonial-mobile-text" style={{ display:'none', marginBottom:20 }}>
+                <p style={{
+                  margin:'0 0 6px 0',
+                  fontSize:12, fontWeight:600, letterSpacing:'0.12em',
+                  textTransform:'uppercase', color:C.orange,
                   fontFamily:"var(--font-inter),'Inter',sans-serif",
-                }}
-              >
-                <svg viewBox="0 0 24 24" width={20} height={20} fill="#F07820">
-                  <path d="M8 5v14l11-7z"/>
-                </svg>
-                Watch the interview
-              </a>
-
-              {/* Attribution */}
-              <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-                <div style={{
-                  width:64, height:64, borderRadius:'50%',
-                  flexShrink:0, overflow:'hidden',
-                  background:'#CBD5E1',
-                  display:'flex', alignItems:'center', justifyContent:'center',
+                }}>Exclusive Interview</p>
+                <p style={{
+                  margin:0,
+                  fontSize:'clamp(1.1rem,1.6vw,1.4rem)', fontWeight:700,
+                  color:'#1E3A5F', lineHeight:1.3,
+                  fontFamily:"var(--font-inter),'Inter',sans-serif",
                 }}>
-                  <svg viewBox="0 0 24 24" width={36} height={36} fill="#94A3B8">
-                    <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-                  </svg>
-                </div>
-                <div>
-                  <p style={{
-                    fontSize:15, color:'rgba(30,58,138,0.6)',
-                    fontFamily:"var(--font-inter),'Inter',sans-serif",
-                    marginBottom:3,
-                  }}>Early Reviewer · Porter LCV Driver</p>
-                  <p style={{
-                    fontSize:20, fontWeight:700, color:C.orange,
-                    fontFamily:"var(--font-inter),'Inter',sans-serif",
-                  }}>Rajan Kumar</p>
-                </div>
+                  Hear directly from Porter LCV<br/>delivery partners who tried it first.
+                </p>
               </div>
+
+              {/* 16:9 video wrapper — gradient border */}
+              <div style={{
+                padding:3, marginBottom:20,
+                borderRadius:11,
+                background:'linear-gradient(135deg, #F07820 0%, #1A40C0 100%)',
+                boxShadow:'0 8px 32px rgba(0,0,0,0.18)',
+              }}>
+              <div style={{ position:'relative', width:'100%', paddingBottom:'56.25%', borderRadius:8, overflow:'hidden', background:'#000' }}>
+                {videoPlaying ? (
+                  <iframe
+                    src="https://drive.google.com/file/d/1JUs3iJCZ427nV3vC9ayDoj2m398zKgAn/preview"
+                    style={{ position:'absolute', top:0, left:0, width:'100%', height:'100%', border:'none' }}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                    allowFullScreen
+                    title="Early reviewer interview"
+                  />
+                ) : (
+                  <div
+                    role="button"
+                    aria-label="Play early reviewer interview"
+                    tabIndex={0}
+                    onClick={() => setVideoPlaying(true)}
+                    onKeyDown={e => e.key === 'Enter' && setVideoPlaying(true)}
+                    style={{
+                      position:'absolute', top:0, left:0, width:'100%', height:'100%',
+                      backgroundImage:"url('/thumbnail.jpg')",
+                      backgroundSize:'cover', backgroundPosition:'center',
+                      cursor:'pointer',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                    }}
+                  >
+                    <div style={{
+                      width:60, height:60, borderRadius:'50%',
+                      background:'rgba(255,255,255,0.92)',
+                      display:'flex', alignItems:'center', justifyContent:'center',
+                      boxShadow:'0 4px 24px rgba(0,0,0,0.35)',
+                    }}>
+                      <svg viewBox="0 0 24 24" width={26} height={26} fill={C.orange}>
+                        <path d="M8 5v14l11-7z"/>
+                      </svg>
+                    </div>
+
+                  </div>
+                )}
+              </div>{/* end 16:9 inner */}
+              </div>{/* end gradient border */}
 
             </div>
           </div>

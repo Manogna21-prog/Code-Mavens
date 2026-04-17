@@ -101,7 +101,7 @@ def get_zones_for_city(city: str) -> list:
     return CITY_ZONES.get(city, [])
 
 
-def get_zone_by_id(zone_id: str) -> dict | None:
+def get_zone_by_id(zone_id: str) -> "dict | None":
     """Get a specific zone by ID"""
     for city_zones in CITY_ZONES.values():
         for zone in city_zones:

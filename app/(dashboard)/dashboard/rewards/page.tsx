@@ -62,12 +62,12 @@ export default async function RewardsPage() {
         <h2 className="serif text-lg font-bold mb-3" style={{ color: 'var(--ink)' }}>Redeem</h2>
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-xl p-4 text-center" style={{ border: '1px solid var(--rule)' }}>
-            <div className="serif text-2xl font-bold" style={{ color: 'var(--teal)' }}>₹{COINS.DISCOUNT_RATE} off</div>
+            <div className="serif text-2xl font-bold" style={{ color: '#F07820' }}>₹{COINS.DISCOUNT_RATE} off</div>
             <div className="mono text-sm mt-1" style={{ color: 'var(--ink-60)' }}>{COINS.DISCOUNT_COINS_REQUIRED} coins</div>
             <button
               className="mt-3 w-full text-sm font-medium py-2 rounded-lg transition-colors"
               style={coinBalance >= COINS.DISCOUNT_COINS_REQUIRED
-                ? { background: 'var(--teal)', color: 'var(--cream)' }
+                ? { background: '#F07820', color: 'var(--cream)' }
                 : { background: 'var(--ink-10)', color: 'var(--ink-30)', cursor: 'not-allowed' }
               }
               disabled={coinBalance < COINS.DISCOUNT_COINS_REQUIRED}
@@ -76,12 +76,12 @@ export default async function RewardsPage() {
             </button>
           </div>
           <div className="rounded-xl p-4 text-center" style={{ border: '1px solid var(--rule)' }}>
-            <div className="serif text-2xl font-bold" style={{ color: 'var(--teal)' }}>{'\u20B9'}10 Off</div>
+            <div className="serif text-2xl font-bold" style={{ color: '#F07820' }}>{'\u20B9'}10 Off</div>
             <div className="mono text-sm mt-1" style={{ color: 'var(--ink-60)' }}>200 coins</div>
             <button
               className="mt-3 w-full text-sm font-medium py-2 rounded-lg transition-colors"
               style={coinBalance >= 200
-                ? { background: 'var(--teal)', color: 'var(--cream)' }
+                ? { background: '#F07820', color: 'var(--cream)' }
                 : { background: 'var(--ink-10)', color: 'var(--ink-30)', cursor: 'not-allowed' }
               }
               disabled={coinBalance < 200}
@@ -115,7 +115,7 @@ export default async function RewardsPage() {
                     )}
                   </div>
                   <div className="text-right">
-                    <div className="serif text-sm font-bold" style={{ color: isPositive ? 'var(--teal)' : 'var(--red-acc)' }}>
+                    <div className="serif text-sm font-bold" style={{ color: isPositive ? '#F07820' : 'var(--red-acc)' }}>
                       {isPositive ? '+' : ''}{entry.coins}
                     </div>
                     <div className="mono text-xs" style={{ color: 'var(--ink-30)' }}>{date}</div>

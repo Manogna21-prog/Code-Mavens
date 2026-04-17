@@ -88,7 +88,7 @@ function DarkToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
       onClick={onToggle}
       style={{
         width: 48, height: 28, borderRadius: 14,
-        background: on ? '#0D9488' : '#E5E7EB',
+        background: on ? '#F07820' : '#E5E7EB',
         position: 'relative', cursor: 'pointer',
         transition: 'background 0.2s ease', flexShrink: 0,
       }}
@@ -228,8 +228,8 @@ export default function ProfilePage() {
   const ACHIEVEMENTS = [
     { emoji: '🛡️', bg: '#F0EDEB', label: `${stats.policies} Policies` },
     { emoji: '🔥', bg: '#FEF9E7', label: `${stats.streak}w Streak`    },
-    { emoji: '💰', bg: '#ECFDF5', label: `${stats.claims} Claims`     },
-    { emoji: '👥', bg: '#EDE9FE', label: '3 Referrals'                },
+    { emoji: '💰', bg: '#FEF3E8', label: `${stats.claims} Claims`     },
+    { emoji: '👥', bg: '#FEF3E8', label: '3 Referrals'                },
   ];
 
   const DETAILS = [
@@ -287,7 +287,7 @@ export default function ProfilePage() {
         <div style={{ display: 'flex', gap: 12 }}>
           {([
             { value: String(stats.policies), color: '#F07820', label: 'Policies' },
-            { value: String(stats.claims),   color: '#16A34A', label: 'Claims'   },
+            { value: String(stats.claims),   color: '#F07820', label: 'Claims'   },
             { value: `${stats.streak}w`,     color: '#F07820', label: 'Streak'   },
           ] as const).map(({ value, color, label }) => (
             <div key={label} style={{

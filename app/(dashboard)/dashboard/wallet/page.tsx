@@ -59,15 +59,15 @@ export default async function WalletPage() {
       <h1 className="serif text-xl font-bold" style={{ color: 'var(--ink)' }}>Wallet</h1>
 
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-xl p-4" style={{ background: 'var(--teal-bg)', border: '1px solid var(--teal)' }}>
-          <div className="mono text-xs" style={{ color: 'var(--teal)' }}>Total Earned</div>
-          <div className="serif text-2xl font-bold" style={{ color: 'var(--teal-d)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'rgba(240,120,32,0.08)', border: '1px solid #F07820' }}>
+          <div className="mono text-xs" style={{ color: '#F07820' }}>Total Earned</div>
+          <div className="serif text-2xl font-bold" style={{ color: '#D96A10' }}>
             ₹{Number(wallet?.total_earned_inr || 0).toLocaleString()}
           </div>
         </div>
-        <div className="rounded-xl p-4" style={{ background: 'var(--teal-bg)', border: '1px solid var(--teal)' }}>
-          <div className="mono text-xs" style={{ color: 'var(--teal)' }}>This Week</div>
-          <div className="serif text-2xl font-bold" style={{ color: 'var(--teal-d)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'rgba(240,120,32,0.08)', border: '1px solid #F07820' }}>
+          <div className="mono text-xs" style={{ color: '#F07820' }}>This Week</div>
+          <div className="serif text-2xl font-bold" style={{ color: '#D96A10' }}>
             ₹{Number(wallet?.this_week_earned_inr || 0).toLocaleString()}
           </div>
         </div>
@@ -102,7 +102,7 @@ export default async function WalletPage() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <div className="mono text-xs font-medium" style={{ color: payout.status === 'completed' ? 'var(--teal)' : payout.status === 'failed' ? 'var(--red-acc)' : 'var(--ink-60)' }}>
+                    <div className="mono text-xs font-medium" style={{ color: payout.status === 'completed' ? '#F07820' : payout.status === 'failed' ? 'var(--red-acc)' : 'var(--ink-60)' }}>
                       {payout.status}
                     </div>
                     <div className="mono text-xs" style={{ color: 'var(--ink-30)' }}>{date}</div>
