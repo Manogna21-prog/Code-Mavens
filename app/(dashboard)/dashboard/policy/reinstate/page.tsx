@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { PLAN_PACKAGES } from '@/lib/config/constants';
 import { ArrowLeft, Shield, CloudRain, Wind, MapPin } from 'lucide-react';
@@ -21,7 +21,7 @@ interface PremiumQuote {
   };
 }
 
-export default function ReinstatePolicyPage() {
+function ReinstateContent() {
   const router = useRouter();
   const params = useSearchParams();
   const tier = params.get('tier') || 'normal';
@@ -215,5 +215,13 @@ export default function ReinstatePolicyPage() {
         Demo mode — no real payment charged.
       </p>
     </div>
+  );
+}
+
+export default function ReinstatePolicyPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: "center", color: "#9CA3AF" }}>Loading...</div>}>
+      <ReinstateContent />
+    </Suspense>
   );
 }
