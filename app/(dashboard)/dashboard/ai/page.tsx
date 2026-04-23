@@ -408,6 +408,7 @@ export default function AIAssistantPage() {
               style={{
                 alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
                 maxWidth: '85%',
+                minWidth: 0,
                 padding: '12px 16px',
                 borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                 background: m.role === 'user' ? '#F07820' : '#ffffff',
@@ -417,6 +418,8 @@ export default function AIAssistantPage() {
                 fontFamily: F,
                 border: m.role === 'ai' ? '1px solid #E5E7EB' : 'none',
                 boxShadow: m.role === 'ai' ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
               }}
             >
               {m.role === 'ai' && (
