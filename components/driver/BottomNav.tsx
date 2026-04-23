@@ -96,7 +96,7 @@ export default function BottomNav() {
         ref={boxRef}
         style={{
           position: 'relative',
-          maxWidth: 400,
+          maxWidth: 440,
           margin: '0 auto',
           height: SVG_H,
           paddingBottom: 'env(safe-area-inset-bottom)',
