@@ -358,6 +358,7 @@ export default function PolicyPage() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState('');
+  const [windowError, setWindowError] = useState(false);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -551,16 +552,32 @@ export default function PolicyPage() {
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
                 Your {dashboard.last_tier} plan has expired. Reinstate to stay covered.
               </p>
-              <a
-                href={`/dashboard/policy/reinstate?tier=${dashboard.last_tier}`}
+              {windowError && (
+                <div style={{
+                  background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
+                  padding: '10px 14px', marginTop: 12, fontSize: 13, color: '#DC2626', textAlign: 'left',
+                }}>
+                  Payment window is only open on Sundays (6 AM – 11:59 PM IST).
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  const now = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+                  const isSunday = now.getDay() === 0 && now.getHours() >= 6;
+                  if (isSunday) {
+                    window.location.href = `/dashboard/policy/reinstate?tier=${dashboard.last_tier}`;
+                  } else {
+                    setWindowError(true);
+                  }
+                }}
                 style={{
                   display: 'inline-block', marginTop: 16, padding: '10px 24px',
                   borderRadius: 8, background: '#F07820', color: '#fff',
-                  fontWeight: 600, fontSize: 14, textDecoration: 'none',
+                  fontWeight: 600, fontSize: 14, border: 'none', cursor: 'pointer',
                 }}
               >
                 Reinstate Policy
-              </a>
+              </button>
             </>
           ) : (
             <>
