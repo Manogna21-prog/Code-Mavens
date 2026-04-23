@@ -24,34 +24,31 @@ interface PremiumQuote {
 function ReinstateContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const tier = params.get('tier') || 'normal';
+  const initialTier = params.get('tier') || 'normal';
 
+  const [selectedTier, setSelectedTier] = useState(initialTier);
+  const [showPicker, setShowPicker] = useState(false);
   const [quote, setQuote] = useState<PremiumQuote | null>(null);
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
 
-  const plan = PLAN_PACKAGES.find((p) => p.slug === tier);
+  const plan = PLAN_PACKAGES.find((p) => p.slug === selectedTier);
 
   useEffect(() => {
-    async function fetchQuote() {
-      try {
-        const res = await fetch('/api/driver/premium-quote', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tier }),
-        });
-        if (!res.ok) throw new Error('Failed to fetch premium');
-        const data = await res.json();
-        setQuote(data);
-      } catch {
-        setError('Could not calculate premium. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchQuote();
-  }, [tier]);
+    setLoading(true);
+    setQuote(null);
+    setError('');
+    fetch('/api/driver/premium-quote', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tier: selectedTier }),
+    })
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then((d) => setQuote(d))
+      .catch(() => setError('Could not calculate premium. Please try again.'))
+      .finally(() => setLoading(false));
+  }, [selectedTier]);
 
   const handlePay = async () => {
     setPaying(true);
@@ -60,7 +57,7 @@ function ReinstateContent() {
       const res = await fetch('/api/driver/reinstate-policy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tier }),
+        body: JSON.stringify({ tier: selectedTier }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Payment failed'); setPaying(false); return; }
@@ -112,7 +109,7 @@ function ReinstateContent() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
           <Shield size={20} color="#F07820" />
-          <span style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A' }}>{plan?.name ?? tier} Plan</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A' }}>{plan?.name ?? selectedTier} Plan</span>
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
           <span style={{ fontSize: 13, color: '#6B7280' }}>Max Weekly Payout</span>
@@ -140,7 +137,7 @@ function ReinstateContent() {
 
           {/* Base */}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: 14, color: '#4B5563' }}>Base Premium ({tier})</span>
+            <span style={{ fontSize: 14, color: '#4B5563' }}>Base Premium ({plan?.name ?? selectedTier})</span>
             <span style={{ fontSize: 14, fontWeight: 600, color: '#1A1A1A' }}>₹{quote.basePremium}</span>
           </div>
 
@@ -211,9 +208,43 @@ function ReinstateContent() {
         {paying ? 'Processing...' : `Pay ₹${quote?.finalPremium.toFixed(0) ?? '--'} & Reinstate`}
       </button>
 
-      <p style={{ fontSize: 11, color: '#9CA3AF', textAlign: 'center', marginTop: 10 }}>
-        Demo mode — no real payment charged.
-      </p>
+      {/* Change plan toggle */}
+      <button
+        onClick={() => setShowPicker(!showPicker)}
+        style={{
+          display: 'block', width: '100%', marginTop: 12,
+          background: 'none', border: 'none', cursor: 'pointer',
+          fontSize: 13, color: '#F07820', fontWeight: 600, fontFamily: F,
+          textAlign: 'center',
+        }}
+      >
+        {showPicker ? 'Hide plans' : 'Change plan'}
+      </button>
+
+      {/* Inline tier picker */}
+      {showPicker && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 12 }}>
+          {PLAN_PACKAGES.filter((p) => p.slug !== selectedTier).map((p) => (
+            <button
+              key={p.slug}
+              onClick={() => { setSelectedTier(p.slug); setShowPicker(false); }}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '12px 14px', borderRadius: 10, cursor: 'pointer',
+                background: '#fff', border: '1px solid #E8E8EA', fontFamily: F,
+              }}
+            >
+              <div style={{ textAlign: 'left' }}>
+                <p style={{ fontSize: 14, fontWeight: 600, color: '#1A1A1A', margin: 0 }}>{p.name} Plan</p>
+                <p style={{ fontSize: 12, color: '#6B7280', margin: '3px 0 0' }}>
+                  Base ₹{p.weekly_premium_inr}/wk · Max ₹{p.max_weekly_payout_inr.toLocaleString('en-IN')}
+                </p>
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#F07820' }}>Select →</span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

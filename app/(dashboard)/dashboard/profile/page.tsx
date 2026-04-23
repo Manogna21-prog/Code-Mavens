@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { Shield, Sun, Moon, Bell, BellOff, CreditCard, Globe, Headphones, ChevronRight, MessageCircle, Phone, RefreshCw } from 'lucide-react';
+import { Shield, Bell, BellOff, CreditCard, Globe, Headphones, ChevronRight, MessageCircle, Phone, RefreshCw, Users, Copy, Check } from 'lucide-react';
 import { getTranslator } from '@/lib/i18n/translations';
 import Link from 'next/link';
 
@@ -13,6 +13,8 @@ interface ProfileData {
   phone_number: string | null;
   city:         string | null;
   upi_id:       string | null;
+  dl_number:    string | null;
+  rc_number:    string | null;
   trust_score:  number;
   member_since: string;
   language:     string;
@@ -65,10 +67,47 @@ function ToggleSwitch({ on, onToggle, color = '#F07820' }: { on: boolean; onTogg
 function SignOutButton() {
   const [loading, setLoading] = useState(false);
   return (
-    <button onClick={async () => { setLoading(true); const s = createClient(); await s.auth.signOut(); window.location.href = '/login'; }} disabled={loading}
-      style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: '1.5px solid #EF4444', background: 'transparent', color: '#EF4444', fontWeight: 600, fontSize: 15, cursor: loading ? 'not-allowed' : 'pointer', opacity: loading ? 0.6 : 1, fontFamily: F }}>
-      {loading ? 'Signing out…' : 'Sign Out'}
-    </button>
+    <>
+      <style>{`
+        .signout-btn {
+          position: relative;
+          width: 100%;
+          padding: 14px 0;
+          border-radius: 12px;
+          border: 1.5px solid #F07820;
+          background: transparent;
+          color: #F07820;
+          font-weight: 600;
+          font-size: 15px;
+          cursor: pointer;
+          font-family: var(--font-inter),'Inter',sans-serif;
+          overflow: hidden;
+          z-index: 0;
+          transition: color 0.35s ease;
+        }
+        .signout-btn::before {
+          content: '';
+          position: absolute;
+          left: 0; right: 0; bottom: 0;
+          height: 0;
+          background: #F07820;
+          z-index: -1;
+          transition: height 0.35s ease;
+        }
+        .signout-btn:hover { color: #fff; }
+        .signout-btn:hover::before { height: 100%; }
+        .signout-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .signout-btn:disabled:hover { color: #F07820; }
+        .signout-btn:disabled:hover::before { height: 0; }
+      `}</style>
+      <button
+        className="signout-btn"
+        onClick={async () => { setLoading(true); const s = createClient(); await s.auth.signOut(); window.location.href = '/login'; }}
+        disabled={loading}
+      >
+        {loading ? 'Signing out…' : 'Sign Out'}
+      </button>
+    </>
   );
 }
 
@@ -97,6 +136,8 @@ export default function ProfilePage() {
   const [langOpen, setLangOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [referOpen, setReferOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [autoPayOpen, setAutoPayOpen] = useState(false);
   const [autoPayEnabled, setAutoPayEnabled] = useState(false);
   const [autoPaySaving, setAutoPaySaving] = useState(false);
@@ -131,13 +172,13 @@ export default function ProfilePage() {
         if (!user) { window.location.href = '/login'; return; }
 
         const [profileRes, walletRes, policiesRes, streakRes] = await Promise.all([
-          supabase.from('profiles').select('full_name, phone_number, city, upi_id, trust_score, language, auto_renew_enabled').eq('id', user.id).single(),
+          supabase.from('profiles').select('full_name, phone_number, city, upi_id, dl_number, rc_number, trust_score, language, auto_renew_enabled').eq('id', user.id).single(),
           supabase.from('driver_wallet').select('total_claims').eq('driver_id', user.id).single(),
           supabase.from('weekly_policies').select('*', { count: 'exact', head: true }).eq('profile_id', user.id),
           supabase.from('weekly_policies').select('week_start_date, payment_status').eq('profile_id', user.id).order('week_start_date', { ascending: false }).limit(12),
         ]);
 
-        const row = profileRes.data as unknown as { full_name: string | null; phone_number: string | null; city: string | null; upi_id: string | null; trust_score: number; language: string; auto_renew_enabled: boolean } | null;
+        const row = profileRes.data as unknown as { full_name: string | null; phone_number: string | null; city: string | null; upi_id: string | null; dl_number: string | null; rc_number: string | null; trust_score: number; language: string; auto_renew_enabled: boolean } | null;
         if (!row) { window.location.href = '/login'; return; }
 
         const streakRows = (streakRes.data as unknown as { payment_status: string }[]) || [];
@@ -145,7 +186,7 @@ export default function ProfilePage() {
         let streak = 0;
         for (const p of streakRows) { if (p.payment_status === 'paid' || p.payment_status === 'demo') streak++; else break; }
 
-        setProfile({ full_name: row.full_name, phone_number: row.phone_number, city: row.city, upi_id: row.upi_id, trust_score: row.trust_score, language: row.language || 'en', member_since: user.created_at, auto_renew_enabled: row.auto_renew_enabled ?? false });
+        setProfile({ full_name: row.full_name, phone_number: row.phone_number, city: row.city, upi_id: row.upi_id, dl_number: row.dl_number, rc_number: row.rc_number, trust_score: row.trust_score, language: row.language || 'en', member_since: user.created_at, auto_renew_enabled: row.auto_renew_enabled ?? false });
         setAutoPayEnabled(row.auto_renew_enabled ?? false);
         setStats({ policies: policiesRes.count ?? 0, claims: walletRow?.total_claims ?? 0, streak });
       } catch { window.location.href = '/login'; } finally { setLoading(false); }
@@ -174,19 +215,19 @@ export default function ProfilePage() {
   const memberSince = new Date(profile.member_since).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
 
   const ACHIEVEMENTS = [
-    { emoji: '🛡️', bg: '#F0EDEB', label: `${stats.policies} ${t('profile.policies')}` },
-    { emoji: '🔥', bg: '#FEF9E7', label: `${stats.streak}w ${t('profile.streak')}` },
+    { emoji: '🛡️', bg: '#FEF3E8', label: `${stats.policies} ${t('profile.policies')}` },
+    { emoji: '🔥', bg: '#FEF3E8', label: `${stats.streak}w ${t('profile.streak')}` },
     { emoji: '💰', bg: '#FEF3E8', label: `${stats.claims} ${t('profile.claims')}` },
     { emoji: '👥', bg: '#FEF3E8', label: '3 Referrals' },
   ];
 
   const DETAILS = [
-    { label: t('profile.mobile'), value: profile.phone_number || '—' },
-    { label: t('profile.platform'), value: 'Porter' },
-    { label: t('profile.zone'), value: zoneCode },
-    { label: t('profile.shift'), value: t('profile.fullDay') },
-    { label: t('profile.memberSince'), value: memberSince },
-    { label: t('profile.upi'), value: profile.upi_id || '—' },
+    { label: 'Phone', value: profile.phone_number?.replace(/^\+?91/, '') || '—' },
+    { label: 'City', value: zoneCode },
+    { label: 'DL Number', value: profile.dl_number || '—' },
+    { label: 'RC Number', value: profile.rc_number || '—' },
+    { label: 'UPI ID', value: profile.upi_id || '—' },
+    { label: 'Member Since', value: memberSince },
   ];
 
   // Card style adapts to dark mode
@@ -216,29 +257,15 @@ export default function ProfilePage() {
           </div>
         </div>
 
-        {/* ══ 2. Quick Stats ══ */}
-        <div style={{ display: 'flex', gap: 12 }}>
-          {[{ value: String(stats.policies), label: t('profile.policies') }, { value: String(stats.claims), label: t('profile.claims') }, { value: `${stats.streak}w`, label: t('profile.streak') }].map(({ value, label }) => (
-            <div key={label} style={{ flex: 1, background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 14, padding: '16px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-              <span style={{ fontSize: 26, fontWeight: 800, color: '#F07820', fontFamily: F, lineHeight: 1 }}>{value}</span>
-              <span style={{ fontSize: 13, color: textSecondary, fontFamily: F }}>{label}</span>
-            </div>
-          ))}
-        </div>
-
         {/* ══ 3. Achievements ══ */}
         <div style={{ background: cardBg, border: `1px solid ${cardBorder}`, borderRadius: 16, padding: 20 }}>
-          <p style={{ fontSize: 13, fontWeight: 600, color: textSecondary, textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 14px', fontFamily: F }}>{t('profile.achievements')}</p>
-          <div style={{ display: 'flex', gap: 10, marginBottom: 14 }}>
+          <div style={{ display: 'flex', gap: 10 }}>
             {ACHIEVEMENTS.map(({ emoji, bg, label }) => (
               <div key={label} style={{ flex: 1, background: darkMode ? '#222' : bg, borderRadius: 12, padding: '12px 4px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: 28, lineHeight: 1 }}>{emoji}</span>
                 <span style={{ fontSize: 11, fontWeight: 600, color: textSecondary, textAlign: 'center', fontFamily: F }}>{label}</span>
               </div>
             ))}
-          </div>
-          <div style={{ height: 6, borderRadius: 3, background: darkMode ? '#333' : '#E5E7EB', overflow: 'hidden' }}>
-            <div style={{ width: `${Math.min(100, Math.round(profile.trust_score * 100))}%`, height: '100%', borderRadius: 3, background: 'linear-gradient(to right, #F07820, #FBBF24)', transition: 'width 0.6s ease' }} />
           </div>
         </div>
 
@@ -260,7 +287,7 @@ export default function ProfilePage() {
           <div>
             <div onClick={() => setNotifOpen(!notifOpen)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: notifOpen ? 'none' : `1px solid ${divider}`, transition: 'background 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-              <Bell size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+              <Bell size={21} color="#F07820" strokeWidth={1.8} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>{t('profile.notifications')}</span>
               <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: notifOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
             </div>
@@ -294,7 +321,7 @@ export default function ProfilePage() {
           <div>
             <div onClick={() => setAutoPayOpen(!autoPayOpen)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: autoPayOpen ? 'none' : `1px solid ${divider}`, transition: 'background 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-              <RefreshCw size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+              <RefreshCw size={21} color="#F07820" strokeWidth={1.8} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>Auto-Pay</span>
               <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: autoPayOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
             </div>
@@ -353,19 +380,89 @@ export default function ProfilePage() {
             )}
           </div>
 
-          {/* Payment Methods */}
-          <div onClick={() => {}} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: `1px solid ${divider}`, transition: 'background 0.15s' }}
-            onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-            <CreditCard size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
-            <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>{t('profile.paymentMethods')}</span>
-            <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0 }} />
+          {/* Refer a Porter Partner */}
+          <div>
+            <div onClick={() => setReferOpen(!referOpen)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: referOpen ? 'none' : `1px solid ${divider}`, transition: 'background 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+              <Users size={21} color="#F07820" strokeWidth={1.8} style={{ flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>Refer a Porter Partner</span>
+              <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: referOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
+            </div>
+            {referOpen && (
+              <div style={{ padding: '12px 20px 16px', background: darkMode ? '#1A1A1A' : '#F9FAFB', borderBottom: `1px solid ${divider}` }}>
+                <p style={{ fontSize: 13, color: textSecondary, lineHeight: 1.5, margin: '0 0 12px', fontFamily: F }}>
+                  Share your referral code with other Porter LCV drivers. You earn <strong style={{ color: '#F07820' }}>100 SafeShift Coins</strong> when they sign up!
+                </p>
+
+                {/* Referral code */}
+                {(() => {
+                  const code = profile.phone_number
+                    ? `SAFE${profile.phone_number.slice(-4)}`
+                    : 'SAFE0000';
+                  const shareText = `Hey! I use SafeShift for parametric insurance on Porter. Sign up with my code ${code} and we both get rewarded. https://safeshift.in/join?ref=${code}`;
+
+                  return (
+                    <>
+                      <div style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '12px 14px', borderRadius: 10,
+                        background: darkMode ? '#222' : '#fff',
+                        border: `1.5px dashed #F07820`,
+                        marginBottom: 12,
+                      }}>
+                        <span style={{ flex: 1, fontSize: 18, fontWeight: 800, color: '#F07820', letterSpacing: '0.1em', fontFamily: F }}>
+                          {code}
+                        </span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(code);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 4,
+                            padding: '6px 12px', borderRadius: 8,
+                            background: copied ? '#EEFBF3' : '#FEF3E8',
+                            border: 'none', cursor: 'pointer',
+                            fontSize: 12, fontWeight: 600,
+                            color: copied ? '#22C55E' : '#F07820', fontFamily: F,
+                          }}
+                        >
+                          {copied ? <><Check size={14} /> Copied</> : <><Copy size={14} /> Copy</>}
+                        </button>
+                      </div>
+
+                      {/* Share button */}
+                      <button
+                        onClick={() => {
+                          if (navigator.share) {
+                            navigator.share({ title: 'SafeShift Referral', text: shareText }).catch(() => {});
+                          } else {
+                            navigator.clipboard.writeText(shareText);
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 2000);
+                          }
+                        }}
+                        style={{
+                          width: '100%', padding: '11px 0', borderRadius: 10,
+                          background: '#F07820', color: '#fff', border: 'none',
+                          fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: F,
+                        }}
+                      >
+                        Share with Porter Partners
+                      </button>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Language */}
           <div>
             <div onClick={() => setLangOpen(!langOpen)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: langOpen ? 'none' : `1px solid ${divider}`, transition: 'background 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-              <Globe size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+              <Globe size={21} color="#F07820" strokeWidth={1.8} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>Language · {currentLangLabel}</span>
               <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: langOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
             </div>
@@ -385,7 +482,7 @@ export default function ProfilePage() {
           <div>
             <div onClick={() => setHelpOpen(!helpOpen)} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '16px 20px', cursor: 'pointer', borderBottom: helpOpen ? 'none' : 'none', transition: 'background 0.15s' }}
               onMouseEnter={e => (e.currentTarget.style.background = darkMode ? '#222' : '#F9FAFB')} onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-              <Headphones size={21} color={textMuted} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+              <Headphones size={21} color="#F07820" strokeWidth={1.8} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 16, color: textPrimary, fontFamily: F }}>{t('profile.helpSupport')}</span>
               <ChevronRight size={16} color="#D1D5DB" strokeWidth={2} style={{ flexShrink: 0, transform: helpOpen ? 'rotate(90deg)' : 'none', transition: 'transform 0.2s' }} />
             </div>
