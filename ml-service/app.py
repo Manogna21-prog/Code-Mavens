@@ -1,5 +1,4 @@
 """
-SafeShift ML Prediction Service (FastAPI)
 
 Endpoints:
   POST /predict/rainfall    — P(precipitation > 65mm in 7 days) for a city
