@@ -497,61 +497,44 @@ export default function DashboardHomePage() {
         )}
 
         {/* ══════════════════════════════════════════
-            2. ZONE STATUS CARD
+            2. CITY CARD
         ══════════════════════════════════════════ */}
         <div
           className="dsh-s"
           style={{
             animationDelay: '0.05s',
-            background: zoneCardBg,
-            border: `1.5px solid ${zoneCardBorder}`,
+            background: '#FEF3E8',
+            border: '1.5px solid #F5C49A',
             borderRadius: 16,
-            padding: 20,
+            padding: '14px 20px',
+            display: 'flex', alignItems: 'center', gap: 14,
           }}
         >
-          {/* Single row: dot + status/city | weather metrics */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          {/* City name */}
+          <span style={{ fontSize: 18, fontWeight: 800, color: '#F07820', fontFamily: F, letterSpacing: '-0.02em', flex: '0 0 auto' }}>
+            {cityName}
+          </span>
 
-            {/* Left — dot + status + city */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: '0 0 auto' }}>
-              <span style={{
-                width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                background: zoneDotColor,
-                boxShadow: `0 0 0 3px ${zoneDotColor}2A`,
-                animation: data.zone_status !== 'safe' ? 'dsh-pulse 1.5s ease-in-out infinite' : 'none',
-              }} />
-              <div>
-                <div style={{ fontSize: 16, fontWeight: 700, color: zoneDotColor, fontFamily: F, lineHeight: 1.2 }}>
-                  {t(`zone.${data.zone_status}`)}
-                </div>
-                <div style={{ fontSize: 12, color: '#4B5563', fontFamily: F, lineHeight: 1.2 }}>
-                  {driverZoneName !== cityName ? `${cityName} · ${driverZoneName}` : cityName}
-                </div>
+          {/* Divider */}
+          <div style={{ width: 1, height: 32, background: '#F5C49A', flexShrink: 0 }} />
+
+          {/* Weather metrics */}
+          <div style={{ display: 'flex', flex: 1 }}>
+            {([
+              { Icon: CloudRain,   label: 'Rain', value: `${data.weather?.current_rain_mm ?? 0}mm` },
+              { Icon: Thermometer, label: 'Temp', value: `${data.weather?.current_temp != null ? Math.round(data.weather.current_temp) : '--'}°C` },
+              { Icon: Wind,        label: 'AQI',  value: `${data.weather?.current_aqi || '--'}` },
+            ] as const).map(({ Icon, label, value }, i) => (
+              <div key={label} style={{
+                flex: 1, display: 'flex', flexDirection: 'column',
+                alignItems: 'center', gap: 2,
+                borderRight: i < 2 ? '1px solid #F5C49A' : 'none',
+              }}>
+                <Icon size={14} color="#F07820" strokeWidth={1.5} />
+                <span style={{ fontSize: 10, color: '#9A3412', fontFamily: F }}>{label}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{value}</span>
               </div>
-            </div>
-
-            {/* Vertical divider */}
-            <div style={{ width: 1, height: 36, background: zoneDivider, flexShrink: 0 }} />
-
-            {/* Right — weather metrics */}
-            <div style={{ display: 'flex', flex: 1 }}>
-              {([
-                { Icon: CloudRain,   label: t('zone.rain'), value: `${data.weather?.current_rain_mm ?? 0}mm` },
-                { Icon: Thermometer, label: t('zone.temp'), value: `${data.weather?.current_temp != null ? Math.round(data.weather.current_temp) : '--'}°C` },
-                { Icon: Wind,        label: t('zone.aqi'),  value: `${data.weather?.current_aqi  || '--'}` },
-              ] as const).map(({ Icon, label, value }, i) => (
-                <div key={label} style={{
-                  flex: 1, display: 'flex', flexDirection: 'column',
-                  alignItems: 'center', gap: 2,
-                  borderRight: i < 2 ? `1px solid ${zoneStatBorder}` : 'none',
-                }}>
-                  <Icon size={14} color="#6B7280" strokeWidth={1.5} />
-                  <span style={{ fontSize: 11, color: '#6B7280', fontFamily: F }}>{label}</span>
-                  <span style={{ fontSize: 14, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{value}</span>
-                </div>
-              ))}
-            </div>
-
+            ))}
           </div>
         </div>
 
