@@ -1,11 +1,17 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import { CITIES } from '@/lib/config/cities';
 import { DISRUPTION_TYPES, TRIGGERS } from '@/lib/config/constants';
+import { RING_SIZE_BY_TYPE, disk, toCell } from '@/lib/utils/h3';
 import type { DisruptionType } from '@/lib/config/constants';
-import { Zap, Activity, BarChart3, TrendingUp, MapPin, CloudLightning, Gauge, Radio } from 'lucide-react';
+import type { RiderPoint, EventOverlay } from '@/components/admin/ZoneH3Map';
+import { Zap, Activity, BarChart3, TrendingUp, MapPin, CloudLightning, Gauge, Radio, Hexagon } from 'lucide-react';
+
+// Leaflet pulls window; client-side only.
+const ZoneH3Map = dynamic(() => import('@/components/admin/ZoneH3Map'), { ssr: false });
 
 /* ═══════════════ Types ═══════════════ */
 
@@ -157,6 +163,79 @@ export default function AdminTriggersPage() {
   const [demoResult, setDemoResult] = useState<TriggerResult | null>(null);
   const triggerConfig = TRIGGERS[demoEventType];
 
+  // Zone-level (H3) controls
+  const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [ringSize, setRingSize] = useState<number>(RING_SIZE_BY_TYPE[DISRUPTION_TYPES[0]]);
+  const [riders, setRiders] = useState<RiderPoint[]>([]);
+  const [activeEvents, setActiveEvents] = useState<EventOverlay[]>([]);
+
+  const demoCityMeta = useMemo(() => CITIES.find((c) => c.slug === demoCity) ?? CITIES[0], [demoCity]);
+  const demoMapCenter: [number, number] = [demoCityMeta.latitude, demoCityMeta.longitude];
+
+  // Re-snap ring size to the recommended default when event type changes
+  useEffect(() => { setRingSize(RING_SIZE_BY_TYPE[demoEventType]); }, [demoEventType]);
+
+  // Preview: which H3 cells will be affected by the current pin + ring?
+  const previewCells = useMemo(() => {
+    const origin = pin ?? { lat: demoCityMeta.latitude, lng: demoCityMeta.longitude };
+    return disk(toCell(origin.lat, origin.lng), ringSize);
+  }, [pin, ringSize, demoCityMeta]);
+
+  // Riders that would be eligible if we fired right now
+  const previewRiders = useMemo(() => {
+    const set = new Set(previewCells);
+    return riders.filter((r) => set.has(r.h3_cell));
+  }, [previewCells, riders]);
+
+  // Load live riders + active events (scoped to last 30 min of heartbeats)
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = createClient();
+    const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+
+    async function load() {
+      const [logsRes, evtRes] = await Promise.all([
+        supabase
+          .from('driver_activity_logs')
+          .select('profile_id, latitude, longitude, h3_cell, status, recorded_at, profiles(full_name)')
+          .gte('recorded_at', since)
+          .neq('status', 'offline')
+          .order('recorded_at', { ascending: false })
+          .limit(2000),
+        supabase
+          .from('live_disruption_events')
+          .select('id, event_type, center_h3_cell, h3_ring_size, severity_score, resolved_at')
+          .is('resolved_at', null)
+          .order('created_at', { ascending: false })
+          .limit(50),
+      ]);
+      if (cancelled) return;
+
+      const latest = new Map<string, { profile_id: string; latitude: number | null; longitude: number | null; h3_cell: string | null; status: string; recorded_at: string; profiles: { full_name: string | null } | null }>();
+      for (const row of (logsRes.data as never[]) || []) {
+        const r = row as { profile_id: string; latitude: number | null; longitude: number | null; h3_cell: string | null; status: string; recorded_at: string; profiles: { full_name: string | null } | null };
+        if (!latest.has(r.profile_id)) latest.set(r.profile_id, r);
+      }
+      const points: RiderPoint[] = [];
+      for (const r of latest.values()) {
+        if (!r.h3_cell || r.latitude == null || r.longitude == null) continue;
+        points.push({ profile_id: r.profile_id, name: r.profiles?.full_name ?? null, lat: r.latitude, lng: r.longitude, status: r.status, h3_cell: r.h3_cell, recorded_at: r.recorded_at });
+      }
+
+      const evs: EventOverlay[] = [];
+      for (const row of (evtRes.data as never[]) || []) {
+        const e = row as { id: string; event_type: string; center_h3_cell: string | null; h3_ring_size: number | null; severity_score: number };
+        if (!e.center_h3_cell || e.h3_ring_size == null) continue;
+        evs.push({ id: e.id, event_type: e.event_type, center_h3_cell: e.center_h3_cell, h3_ring_size: e.h3_ring_size, severity_score: e.severity_score });
+      }
+      setRiders(points);
+      setActiveEvents(evs);
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [demoCity, demoResult?.event_id]);
+
   useEffect(() => {
     async function load() {
       try {
@@ -212,8 +291,14 @@ export default function AdminTriggersPage() {
   async function handleFireTrigger() {
     setDemoLoading(true); setDemoResult(null);
     try {
-      const body: Record<string, unknown> = { city: demoCity, event_type: demoEventType, severity: demoSeverity };
+      const body: Record<string, unknown> = {
+        city: demoCity,
+        event_type: demoEventType,
+        severity: demoSeverity,
+        h3_ring_size: ringSize,
+      };
       if (demoTriggerValue) body.trigger_value = Number(demoTriggerValue);
+      if (pin) { body.zone_latitude = pin.lat; body.zone_longitude = pin.lng; }
       const res = await fetch('/api/admin/demo-trigger', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const data = (await res.json()) as TriggerResult;
       setDemoResult(data);
@@ -429,7 +514,44 @@ export default function AdminTriggersPage() {
           </div>
           <div>
             <h2 style={{ fontSize: 16, fontWeight: 800, color: '#1A1A1A', fontFamily: F }}>Demo Trigger Panel</h2>
-            <p style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>Inject synthetic disruption events for testing</p>
+            <p style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>
+              Click on the map to fire at a specific zone. Leave unpinned to fire at the city centroid.
+            </p>
+          </div>
+        </div>
+
+        {/* Zone-level pin-drop map */}
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid #F3F4F6' }}>
+          <ZoneH3Map
+            center={demoMapCenter}
+            zoom={11}
+            riders={riders}
+            events={activeEvents}
+            pin={pin}
+            previewCells={previewCells}
+            onPin={(lat, lng) => setPin({ lat, lng })}
+            resolutionLabel="H3 res-8 · click to drop pin"
+          />
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 }}>
+            <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Hexagon size={13} style={{ color: NEON.orange }} />
+              {pin ? (
+                <>
+                  Pin at <span style={{ fontFamily: M, color: '#1A1A1A' }}>{pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}</span> —
+                  <span style={{ fontFamily: M, color: '#9A3412' }}>{toCell(pin.lat, pin.lng)}</span>
+                </>
+              ) : (
+                <>No pin — firing at {demoCityMeta.name} centroid</>
+              )}
+              <span style={{ marginLeft: 12, fontFamily: M, color: NEON.orange, fontWeight: 700 }}>
+                {previewCells.length} cells · {previewRiders.length} eligible rider{previewRiders.length === 1 ? '' : 's'}
+              </span>
+            </div>
+            {pin && (
+              <button onClick={() => setPin(null)} style={{ fontSize: 11, fontFamily: M, border: '1px solid #E8E8EA', padding: '3px 10px', borderRadius: 8, background: '#fff', color: '#6B7280', cursor: 'pointer' }}>
+                Clear pin
+              </button>
+            )}
           </div>
         </div>
 
@@ -502,6 +624,30 @@ export default function AdminTriggersPage() {
                 {DISRUPTION_TYPES.map((dt) => <option key={dt} value={dt}>{TRIGGERS[dt].label}</option>)}
               </select>
             </div>
+            {/* Ring size */}
+            <div>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#1A1A1A', marginBottom: 4, fontFamily: M, justifyContent: 'space-between' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Hexagon size={12} style={{ color: NEON.orange }} /> Ring size
+                </span>
+                <span style={{ color: NEON.orange, fontWeight: 800 }}>
+                  {ringSize} · ~{(ringSize * 0.92).toFixed(1)} km
+                </span>
+              </label>
+              <input
+                type="range"
+                min={1}
+                max={20}
+                step={1}
+                value={ringSize}
+                onChange={(e) => setRingSize(Number(e.target.value))}
+                className="w-full"
+                style={{ accentColor: NEON.orange }}
+              />
+              <div style={{ fontSize: 9, color: '#9CA3AF', fontFamily: M, marginTop: 2 }}>
+                default for {demoEventType.replace(/_/g, ' ')}: {RING_SIZE_BY_TYPE[demoEventType]} · covers {previewCells.length} hexagons
+              </div>
+            </div>
             {/* Trigger Value */}
             <div>
               <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#1A1A1A', marginBottom: 4, fontFamily: M }}>
@@ -516,7 +662,11 @@ export default function AdminTriggersPage() {
               onMouseOut={e => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = '0 4px 16px rgba(139,92,246,0.25)'; }}
             >
               <Zap size={14} />
-              {demoLoading ? 'Firing...' : 'Fire Trigger'}
+              {demoLoading
+                ? 'Firing...'
+                : pin
+                  ? `Fire at pin · ${previewRiders.length} rider${previewRiders.length === 1 ? '' : 's'}`
+                  : 'Fire at city centroid'}
             </button>
           </div>
         </div>

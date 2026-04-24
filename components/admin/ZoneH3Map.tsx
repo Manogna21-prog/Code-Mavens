@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { MapContainer, TileLayer, Polygon, CircleMarker, Tooltip, useMapEvents } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { cellCenter, cellPolygon, disk, toCell } from '@/lib/utils/h3';
@@ -102,10 +102,9 @@ export default function ZoneH3Map({
   previewCells,
   resolutionLabel,
 }: Props) {
-  // SSR guard — Leaflet touches window, so only render after mount.
-  const [mounted, setMounted] = useState(false);
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => setMounted(true), []);
+  // (dynamic(..., { ssr: false }) at the import site already handles SSR —
+  // adding another mount guard here double-mounts the MapContainer under
+  // React 18 Strict Mode and breaks Leaflet's internal refs.)
 
   // Compute per-cell rider density from incoming points.
   const densityByCell = useMemo(() => {
@@ -130,12 +129,6 @@ export default function ZoneH3Map({
   }, [events]);
 
   const previewCellSet = useMemo(() => new Set(previewCells ?? []), [previewCells]);
-
-  if (!mounted) {
-    return (
-      <div style={{ width: '100%', height: 500, borderRadius: 16, background: '#F3F4F6' }} />
-    );
-  }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: 520, borderRadius: 16, overflow: 'hidden', border: '1px solid #E8E8EA' }}>
