@@ -33,11 +33,12 @@ export default function DashboardLayout({
 
   return (
     <div className="min-h-screen" style={{
+      position: 'relative',
       background: dark ? '#111111' : '#F6F7F9',
       color: dark ? '#E5E7EB' : '#1A1A1A',
       transition: 'background 0.3s ease, color 0.3s ease',
     }}>
-      <main className="pb-20 max-w-lg mx-auto">
+      <main className="pb-20 max-w-lg mx-auto" style={{ position: 'relative' }}>
         {children}
       </main>
       <BottomNav />

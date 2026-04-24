@@ -206,10 +206,10 @@ export default function AdminTriggersPage() {
   useEffect(() => {
     let cancelled = false;
     const supabase = createClient();
-    const since = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(); // 24h window for preview
 
     async function load() {
-      const [logsRes, evtRes] = await Promise.all([
+      const [logsRes, profilesRes, evtRes] = await Promise.all([
         supabase
           .from('driver_activity_logs')
           .select('profile_id, latitude, longitude, h3_cell, status, recorded_at, profiles(full_name)')
@@ -217,6 +217,14 @@ export default function AdminTriggersPage() {
           .neq('status', 'offline')
           .order('recorded_at', { ascending: false })
           .limit(2000),
+        // Fallback: all active drivers with zone coordinates (same as claim processor)
+        supabase
+          .from('profiles')
+          .select('id, full_name, zone_latitude, zone_longitude, city')
+          .eq('role', 'driver')
+          .eq('onboarding_status', 'complete')
+          .not('zone_latitude', 'is', null)
+          .not('zone_longitude', 'is', null),
         supabase
           .from('live_disruption_events')
           .select('id, event_type, center_h3_cell, h3_ring_size, severity_score, resolved_at')
@@ -226,15 +234,26 @@ export default function AdminTriggersPage() {
       ]);
       if (cancelled) return;
 
+      // Build rider points from activity logs
       const latest = new Map<string, { profile_id: string; latitude: number | null; longitude: number | null; h3_cell: string | null; status: string; recorded_at: string; profiles: { full_name: string | null } | null }>();
       for (const row of (logsRes.data as never[]) || []) {
         const r = row as { profile_id: string; latitude: number | null; longitude: number | null; h3_cell: string | null; status: string; recorded_at: string; profiles: { full_name: string | null } | null };
         if (!latest.has(r.profile_id)) latest.set(r.profile_id, r);
       }
       const points: RiderPoint[] = [];
+      const seenIds = new Set<string>();
       for (const r of latest.values()) {
         if (!r.h3_cell || r.latitude == null || r.longitude == null) continue;
         points.push({ profile_id: r.profile_id, name: r.profiles?.full_name ?? null, lat: r.latitude, lng: r.longitude, status: r.status, h3_cell: r.h3_cell, recorded_at: r.recorded_at });
+        seenIds.add(r.profile_id);
+      }
+
+      // Fallback: add drivers from profiles who have zone coordinates but no recent activity log
+      for (const row of (profilesRes.data as never[]) || []) {
+        const p = row as { id: string; full_name: string | null; zone_latitude: number; zone_longitude: number; city: string };
+        if (seenIds.has(p.id)) continue;
+        const cell = toCell(p.zone_latitude, p.zone_longitude);
+        points.push({ profile_id: p.id, name: p.full_name, lat: p.zone_latitude, lng: p.zone_longitude, status: 'online', h3_cell: cell, recorded_at: new Date().toISOString() });
       }
 
       const evs: EventOverlay[] = [];
@@ -564,7 +583,7 @@ export default function AdminTriggersPage() {
                 <>No pin — firing at {demoCityMeta.name} centroid</>
               )}
               <span style={{ marginLeft: 4, fontFamily: M, color: NEON.orange, fontWeight: 700 }}>
-                · {previewCells.length} cells · {previewRiders.length} eligible rider{previewRiders.length === 1 ? '' : 's'}
+                · {previewCells.length} cells
               </span>
             </div>
             {(pin || zoneId) && (
@@ -704,9 +723,9 @@ export default function AdminTriggersPage() {
               {demoLoading
                 ? 'Firing...'
                 : selectedZone
-                  ? `Fire in ${selectedZone.name} · ${previewRiders.length} rider${previewRiders.length === 1 ? '' : 's'}`
+                  ? `Fire in ${selectedZone.name}`
                   : pin
-                    ? `Fire at pin · ${previewRiders.length} rider${previewRiders.length === 1 ? '' : 's'}`
+                    ? `Fire at pin`
                     : 'Fire at city centroid'}
             </button>
           </div>

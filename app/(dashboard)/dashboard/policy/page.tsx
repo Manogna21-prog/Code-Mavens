@@ -940,7 +940,7 @@ export default function PolicyPage() {
               const dynamicPremium = premium?.final_premium ?? policy?.premium ?? '--';
 
               if (isPaymentWindow && (isExpired || isUrgent)) {
-                // PAYMENT WINDOW IS OPEN — show pay button
+                // PAYMENT WINDOW IS OPEN — redirect to reinstate page
                 return (
                   <div style={{ marginTop: 12, padding: '16px', borderRadius: 12, background: 'linear-gradient(135deg, rgba(240,120,32,0.06), rgba(251,146,60,0.06))', border: '1px solid #FDBA74' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -948,86 +948,17 @@ export default function PolicyPage() {
                       <span style={{ fontSize: 13, fontWeight: 700, color: '#16a34a' }}>Payment window is OPEN</span>
                     </div>
                     <p style={{ fontSize: 13, color: '#4B5563', margin: '0 0 4px' }}>
-                      Pay <strong style={{ color: '#F07820' }}>₹{dynamicPremium}</strong> now to get covered for <strong>{nextMonStr} – {coverEndStr}</strong>
+                      Your next policy will be active from <strong>{nextMonStr} – {coverEndStr}</strong>
                     </p>
                     <p style={{ fontSize: 11, color: '#9CA3AF', margin: '0 0 12px' }}>
-                      Window closes Monday 6:00 AM. Premium is calculated dynamically based on your zone, weather risk, and claim history.
+                      Premium is calculated dynamically based on your zone, weather risk, and claim history. Window closes Sunday 11:59 PM IST.
                     </p>
-                    {paymentError && (
-                      <p style={{ fontSize: 12, color: '#EF4444', margin: '0 0 8px' }}>{paymentError}</p>
-                    )}
-                    <button
-                      disabled={paymentProcessing}
-                      onClick={async () => {
-                        setPaymentProcessing(true);
-                        setPaymentError('');
-                        try {
-                          // Step 1: Create weekly renewal order
-                          const orderRes = await fetch('/api/payments/create-weekly-order', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ plan_slug: tier }),
-                          });
-                          const orderData = await orderRes.json();
-                          if (!orderRes.ok) {
-                            setPaymentError(orderData.error || 'Failed to create order');
-                            setPaymentProcessing(false);
-                            return;
-                          }
-                          const { orderId, amount, plan_id: planId } = orderData;
-
-                          // Step 2: Open Razorpay checkout
-                          await openRazorpayCheckout({
-                            orderId,
-                            amount,
-                            description: 'SafeShift Weekly Renewal',
-                            onSuccess: async (response: RazorpaySuccessResponse) => {
-                              try {
-                                // Step 3: Verify payment
-                                const verifyRes = await fetch('/api/payments/verify', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({
-                                    razorpay_order_id: response.razorpay_order_id,
-                                    razorpay_payment_id: response.razorpay_payment_id,
-                                    razorpay_signature: response.razorpay_signature,
-                                    plan_id: planId,
-                                    type: 'renewal',
-                                    dynamic_premium: orderData.premium_breakdown?.total,
-                                  }),
-                                });
-                                const verifyData = await verifyRes.json();
-                                if (!verifyRes.ok) {
-                                  setPaymentError(verifyData.error || 'Payment verification failed');
-                                  setPaymentProcessing(false);
-                                  return;
-                                }
-                                // Step 4: Show success, reload data
-                                setPaymentSuccess(true);
-                                setPaymentProcessing(false);
-                                fetchAll();
-                              } catch (err) {
-                                setPaymentError(err instanceof Error ? err.message : 'Verification failed');
-                                setPaymentProcessing(false);
-                              }
-                            },
-                            onFailure: (errMsg: string) => {
-                              setPaymentError(errMsg || 'Payment failed');
-                              setPaymentProcessing(false);
-                            },
-                            onDismiss: () => {
-                              setPaymentProcessing(false);
-                            },
-                          });
-                        } catch (err) {
-                          setPaymentError(err instanceof Error ? err.message : 'Payment failed');
-                          setPaymentProcessing(false);
-                        }
-                      }}
-                      style={{ padding: '10px 24px', borderRadius: 10, background: paymentProcessing ? '#ccc' : 'linear-gradient(135deg, #F07820, #FB923C)', color: '#fff', fontWeight: 700, fontSize: 14, border: 'none', cursor: paymentProcessing ? 'not-allowed' : 'pointer', transition: 'all 0.2s', opacity: paymentProcessing ? 0.7 : 1 }}
+                    <a
+                      href={`/dashboard/policy/reinstate?tier=${tier}`}
+                      style={{ display: 'inline-block', padding: '10px 24px', borderRadius: 10, background: '#F07820', color: '#fff', fontWeight: 700, fontSize: 14, textDecoration: 'none' }}
                     >
-                      {paymentProcessing ? 'Processing...' : `Pay ₹${dynamicPremium} Now`}
-                    </button>
+                      Reinstate Policy
+                    </a>
                   </div>
                 );
               }

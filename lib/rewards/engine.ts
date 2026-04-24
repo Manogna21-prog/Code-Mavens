@@ -214,7 +214,7 @@ export async function checkAndAwardCleanClaims(
     .from('coins_ledger')
     .select('*', { count: 'exact', head: true })
     .eq('profile_id', profileId)
-    .eq('activity', 'clean_claims_6_months')
+    .eq('activity', 'clean_claims')
     .gte('created_at', sixMonthsAgo);
 
   if ((alreadyAwarded ?? 0) > 0) return { awarded: false };
@@ -238,7 +238,7 @@ export async function checkAndAwardCleanClaims(
 
   if ((policyCount ?? 0) === 0) return { awarded: false };
 
-  await awardCoins(profileId, 'clean_claims_6_months', COINS.CLEAN_CLAIMS_6_MONTHS, '6 months clean claims bonus');
+  await awardCoins(profileId, 'clean_claims', COINS.CLEAN_CLAIMS_6_MONTHS, '6 months clean claims bonus');
   return { awarded: true };
 }
 
