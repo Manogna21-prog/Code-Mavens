@@ -532,19 +532,12 @@ def predict_premium(req: PremiumRequest):
         weights["aqi"] * aqi_prob
     )
 
-    # WeatherRisk addon: capped [10, 20]
-    weather_risk_addon = 10 + (combined_risk * 10)
+    # WeatherRisk addon: capped [10, 20]. No seasonal multiplier — the
+    # XGBoost rainfall/wind models already encode month-of-year features
+    # (sin/cos + monsoon/winter/cyclone-season flags), so a hand-picked
+    # monthly scalar on top would double-count seasonality.
+    weather_risk_addon = round(10 + (combined_risk * 10), 2)
     weather_risk_addon = max(10, min(20, weather_risk_addon))
-
-    # Seasonal risk multiplier (Indian weather patterns)
-    SEASONAL_MULTIPLIER = {
-        1: 0.85, 2: 0.85, 3: 1.0, 4: 1.15, 5: 1.25,
-        6: 1.4, 7: 1.4, 8: 1.4, 9: 1.3, 10: 1.2, 11: 1.15, 12: 0.9,
-    }
-    current_month = datetime.strptime(prediction_date, "%Y-%m-%d").month
-    seasonal_mult = SEASONAL_MULTIPLIER.get(current_month, 1.0)
-    weather_risk_addon = round(weather_risk_addon * seasonal_mult, 2)
-    weather_risk_addon = max(10, min(30, weather_risk_addon))  # expanded cap for monsoon
 
     # UBI addon: based on driver's zone exposure (from mock Porter API)
     driver_zones = get_driver_zones(req.city, req.driver_id)

@@ -169,21 +169,13 @@ export const PREMIUM = {
   // Floor: premium never goes below base
 } as const;
 
-// --- Seasonal Risk Multipliers (Indian context) ---
-export const SEASONAL_RISK: Record<number, number> = {
-  0: 0.85,  // Jan: low risk
-  1: 0.85,  // Feb: low risk
-  2: 1.0,   // Mar: transition
-  3: 1.15,  // Apr: pre-monsoon heat
-  4: 1.25,  // May: heat + pre-monsoon
-  5: 1.4,   // Jun: monsoon onset
-  6: 1.4,   // Jul: peak monsoon
-  7: 1.4,   // Aug: monsoon
-  8: 1.3,   // Sep: retreating monsoon
-  9: 1.2,   // Oct: cyclone season
-  10: 1.15, // Nov: GRAP-IV season (Delhi)
-  11: 0.9,  // Dec: winter AQI risk in north
-};
+// Seasonality: intentionally NOT a separate multiplier.
+//   - ML path: the XGBoost rainfall/wind models already take month-of-year
+//     (cyclical sin/cos + monsoon/winter/cyclone-season flags) as features,
+//     so a second multiplier on top would double-count.
+//   - Fallback path: the 7-day forecast we feed into the formula already
+//     reflects the current season. An additional hand-picked monthly
+//     multiplier was a guess we couldn't defend against data.
 
 // --- Claim Rules ---
 export const CLAIM_RULES = {

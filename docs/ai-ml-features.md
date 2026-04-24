@@ -92,9 +92,10 @@ Spaces** on port 7860. Config lives in `process.env.ML_SERVICE_URL`
 FinalPremium = BasePremium + WeatherRisk + UBI
 
 BasePremium  — plan tier (₹80 / 120 / 160)
-WeatherRisk  — /predict/premium response, capped [₹10, ₹30],
-               weighted by city-specific risk weights and a
-               seasonal multiplier (monsoon +40%, winter +15%, ...)
+WeatherRisk  — /predict/premium response, capped [₹10, ₹20],
+               weighted by city-specific risk weights.
+               (No separate seasonal multiplier — the XGBoost models
+                already encode month-of-year as engineered features.)
 UBI          — /driver/zones weighted zone risk, capped [₹0, ₹15]
 ```
 
