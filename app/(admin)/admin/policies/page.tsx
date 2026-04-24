@@ -812,14 +812,24 @@ export default function AdminPoliciesPage() {
                   <p className="text-sm mt-1" style={{ color: '#dc2626' }}>{calcResult.error}</p>
                 </div>
               ) : (
-                /* Premium result — colorful multi-section layout */
+                /* Premium result — colorful multi-section layout.
+                 * Round each component first, then sum, so the banner total
+                 * always equals base + weather + ubi at the precision the user
+                 * sees. Backend's final_premium is computed on unrounded floats
+                 * and therefore drifts by ±1 from the rounded display values. */
+                (() => {
+                  const displayBase = Math.round(Number(calcResult.base_premium || 0));
+                  const displayWeather = Math.round(Number(calcResult.weather_risk_addon || 0));
+                  const displayUbi = Math.round(Number(calcResult.ubi_addon || 0));
+                  const displayTotal = displayBase + displayWeather + displayUbi;
+                  return (
                 <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #E8E8EA' }}>
                   {/* Top banner — final premium */}
                   <div style={{ background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', padding: '20px 24px', color: '#fff', position: 'relative', overflow: 'hidden' }}>
                     <div style={{ position: 'absolute', top: -20, right: -20, width: 80, height: 80, borderRadius: '50%', background: 'rgba(255,255,255,0.1)' }} />
                     <div className="mono text-xs" style={{ opacity: 0.8, marginBottom: 4 }}>FINAL WEEKLY PREMIUM</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                      <span style={{ fontSize: 36, fontWeight: 800 }}>&#8377;{Number(calcResult.final_premium || 0).toFixed(0)}</span>
+                      <span style={{ fontSize: 36, fontWeight: 800 }}>&#8377;{displayTotal}</span>
                       <span style={{ fontSize: 14, opacity: 0.7 }}>/week</span>
                     </div>
                   </div>
@@ -828,15 +838,15 @@ export default function AdminPoliciesPage() {
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0 }}>
                     <div style={{ padding: '16px 20px', background: 'linear-gradient(135deg, #eff6ff, #dbeafe)', borderRight: '1px solid #E8E8EA' }}>
                       <div className="mono" style={{ fontSize: 10, color: '#6B7280', marginBottom: 4 }}>BASE PREMIUM</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#3B82F6' }}>&#8377;{Number(calcResult.base_premium || 0).toFixed(0)}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#3B82F6' }}>&#8377;{displayBase}</div>
                     </div>
                     <div style={{ padding: '16px 20px', background: 'linear-gradient(135deg, #fefce8, #fef9c3)', borderRight: '1px solid #E8E8EA' }}>
                       <div className="mono" style={{ fontSize: 10, color: '#6B7280', marginBottom: 4 }}>WEATHER RISK</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#D97706' }}>+&#8377;{Number(calcResult.weather_risk_addon || 0).toFixed(0)}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#D97706' }}>+&#8377;{displayWeather}</div>
                     </div>
                     <div style={{ padding: '16px 20px', background: 'linear-gradient(135deg, #faf5ff, #ede9fe)' }}>
                       <div className="mono" style={{ fontSize: 10, color: '#6B7280', marginBottom: 4 }}>UBI ZONE</div>
-                      <div style={{ fontSize: 22, fontWeight: 800, color: '#7C3AED' }}>+&#8377;{Number(calcResult.ubi_addon || 0).toFixed(0)}</div>
+                      <div style={{ fontSize: 22, fontWeight: 800, color: '#7C3AED' }}>+&#8377;{displayUbi}</div>
                     </div>
                   </div>
 
@@ -899,6 +909,8 @@ export default function AdminPoliciesPage() {
                     )}
                   </div>
                 </div>
+                  );
+                })()
               )}
             </div>
           )}
