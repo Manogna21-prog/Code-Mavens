@@ -7,7 +7,6 @@ import type { TierType, OnboardingStatus } from '@/lib/config/constants';
 import LanguageStep from './steps/LanguageStep';
 import AadhaarKycStep from './steps/AadhaarKycStep';
 import DocumentUploadStep from './steps/DocumentUploadStep';
-import UpiVerifyStep from './steps/UpiVerifyStep';
 import CitySelectStep from './steps/CitySelectStep';
 import TierSelectStep from './steps/TierSelectStep';
 import PaymentStep from './steps/PaymentStep';
@@ -16,7 +15,6 @@ const STEPS = [
   'Language',
   'Aadhaar KYC',
   'Documents (DL/RC)',
-  'UPI Verification',
   'City Selection',
   'Choose Plan',
   'Payment',
@@ -27,11 +25,11 @@ const STATUS_TO_STEP: Record<string, number> = {
   language_selected: 1,
   aadhaar_verified: 2,
   documents_uploaded: 3,
-  upi_verified: 4,
-  city_selected: 5,
-  tier_selected: 6,
-  payment_done: 7,
-  complete: 7,
+  upi_verified: 3,
+  city_selected: 4,
+  tier_selected: 5,
+  payment_done: 6,
+  complete: 6,
 };
 
 interface ProfileData {
@@ -130,22 +128,15 @@ export default function OnboardingPage() {
     goToStep(3);
   };
 
-  const handleUpi = async (upiId: string) => {
-    await updateProfile({ upi_id: upiId, upi_verified: true }, 'upi_verified');
-    goToStep(4);
-  };
-
   const handleCity = async (data: { city: string; zone_latitude: number; zone_longitude: number }) => {
     await updateProfile(data, 'city_selected');
-    goToStep(5);
+    goToStep(4);
   };
 
   const handleTier = async (tier: TierType) => {
     setSelectedTier(tier);
-    // We don't store tier in profile directly; it maps to a plan_package.
-    // Mark the step as done.
     await updateProfile({}, 'tier_selected');
-    goToStep(6);
+    goToStep(5);
   };
 
   const handlePayment = async () => {
@@ -208,35 +199,27 @@ export default function OnboardingPage() {
       )}
 
       {currentStep === 3 && (
-        <UpiVerifyStep
-          initialUpi={profile?.upi_id ?? ''}
-          onNext={handleUpi}
+        <CitySelectStep
+          initialCity={profile?.city ?? ''}
+          onNext={handleCity}
           onBack={() => goToStep(2)}
         />
       )}
 
       {currentStep === 4 && (
-        <CitySelectStep
-          initialCity={profile?.city ?? ''}
-          onNext={handleCity}
+        <TierSelectStep
+          initialTier={selectedTier}
+          onNext={handleTier}
           onBack={() => goToStep(3)}
         />
       )}
 
       {currentStep === 5 && (
-        <TierSelectStep
-          initialTier={selectedTier}
-          onNext={handleTier}
-          onBack={() => goToStep(4)}
-        />
-      )}
-
-      {currentStep === 6 && (
         <PaymentStep
           tier={selectedTier || 'normal'}
           city={profile?.city ?? ''}
           onNext={handlePayment}
-          onBack={() => goToStep(5)}
+          onBack={() => goToStep(4)}
         />
       )}
     </div>

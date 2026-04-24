@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect, useRef, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/client';
 import gsap from 'gsap';
@@ -31,13 +31,17 @@ function getAngle(x1: number, y1: number, x2: number, y2: number) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const initialRole = searchParams.get('role') === 'admin' ? 'admin' : null;
+  const [role, setRole] = useState<'driver' | 'admin' | null>(initialRole);
   const [email,    setEmail]    = useState('');
   const [password, setPassword] = useState('');
   const [showPass, setShowPass] = useState(false);
   const [error,    setError]    = useState('');
   const [loading,  setLoading]  = useState(false);
+  const isAdminLogin = role === 'admin';
 
   // ── SVG refs ──────────────────────────────────────────────────────────────
   const svgWrapRef    = useRef<HTMLDivElement>(null);
@@ -179,6 +183,7 @@ export default function LoginPage() {
   }, []);
 
   const startBlinking = useCallback((delay?: number) => {
+    if (!eyeLRef.current || !eyeRRef.current) return;
     const d = delay ? Math.floor(Math.random() * delay) : 1;
     blinkTween.current = gsap.to([eyeLRef.current, eyeRRef.current], {
       duration:.1, delay:d, scaleY:0, yoyo:true, repeat:1,
@@ -188,6 +193,9 @@ export default function LoginPage() {
   }, []);
 
   useEffect(() => {
+    // Skip GSAP setup when role picker is shown (SVG not rendered)
+    if (role === null) return;
+    if (!armLRef.current) return;
     gsap.set(armLRef.current,    { x:-93, y:220, rotation:105,  transformOrigin:'top left',  visibility:'hidden' });
     gsap.set(armRRef.current,    { x:-93, y:220, rotation:-105, transformOrigin:'top right', visibility:'hidden' });
     gsap.set(mouthRef.current,   { transformOrigin:'center center' });
@@ -201,7 +209,7 @@ export default function LoginPage() {
         noseRef.current, mouthRef.current, chinRef.current, faceRef.current,
         eyebrowRef.current, hairRef.current, bodyBGRef.current, bodyBGChRef.current]);
     };
-  }, [startBlinking]);
+  }, [startBlinking, role]);
 
   // ── email handlers ────────────────────────────────────────────────────────
   function handleEmailFocus() {
@@ -277,6 +285,15 @@ export default function LoginPage() {
     console.log('[Login] Profile fetch:', { profile, error: profileError?.message });
     const p = profile as { onboarding_status: string; role: string } | null;
     if (!p) { router.push('/dashboard'); return; }
+
+    // Enforce role — reject cross-role login silently
+    if ((role === 'admin' && p.role !== 'admin') || (role === 'driver' && p.role === 'admin')) {
+      await supabase.auth.signOut();
+      setError('Invalid credentials');
+      setLoading(false);
+      return;
+    }
+
     if (p.role === 'admin') router.push('/admin');
     else if (p.onboarding_status === 'complete') router.push('/dashboard');
     else router.push('/onboarding');
@@ -298,12 +315,117 @@ export default function LoginPage() {
     fontFamily: "'Inter', sans-serif",
   };
 
+  // ── Role picker ──
+  if (role === null) {
+    return (
+      <div style={{ background: '#ffffff', borderRadius: 16, padding: '2em' }}>
+        <Link href="/" style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          fontSize: '0.8rem', fontWeight: 600, color: '#888',
+          textDecoration: 'none', marginBottom: '1.5em',
+          fontFamily: "'Inter', sans-serif",
+        }}
+          onMouseEnter={e => (e.currentTarget.style.color = ORANGE)}
+          onMouseLeave={e => (e.currentTarget.style.color = '#888')}
+        >
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ flexShrink: 0 }}>
+            <path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+          Back
+        </Link>
+
+        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1a1a1a', marginBottom: '0.5em', textAlign: 'center', fontFamily: "'Inter', sans-serif" }}>
+          Welcome Back
+        </h2>
+        <p style={{ fontSize: '0.875rem', color: '#6B7280', textAlign: 'center', marginBottom: '1.5em', fontFamily: "'Inter', sans-serif" }}>
+          How would you like to sign in?
+        </p>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Driver option */}
+          <button
+            onClick={() => setRole('driver')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 16,
+              padding: '18px 20px', borderRadius: 14,
+              border: '1.5px solid #E8E8EA', background: '#fff',
+              cursor: 'pointer', textAlign: 'left',
+              transition: 'border-color 0.2s, background 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = ORANGE; e.currentTarget.style.background = '#FEF3E8'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8EA'; e.currentTarget.style.background = '#fff'; }}
+          >
+            <div style={{
+              width: 48, height: 48, borderRadius: 12, background: '#FEF3E8',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={ORANGE} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="1" y="3" width="15" height="13" rx="2"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', margin: 0, fontFamily: "'Inter', sans-serif" }}>
+                I&apos;m a Driver
+              </p>
+              <p style={{ fontSize: 12, color: '#6B7280', margin: '2px 0 0', fontFamily: "'Inter', sans-serif" }}>
+                Porter LCV delivery partner
+              </p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+              <path d="M6 4l4 4-4 4" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+
+          {/* Admin option */}
+          <button
+            onClick={() => setRole('admin')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 16,
+              padding: '18px 20px', borderRadius: 14,
+              border: '1.5px solid #E8E8EA', background: '#fff',
+              cursor: 'pointer', textAlign: 'left',
+              transition: 'border-color 0.2s, background 0.2s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = '#1A1A1A'; e.currentTarget.style.background = '#F9FAFB'; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = '#E8E8EA'; e.currentTarget.style.background = '#fff'; }}
+          >
+            <div style={{
+              width: 48, height: 48, borderRadius: 12, background: '#F3F4F6',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1A1A1A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+            <div>
+              <p style={{ fontSize: 16, fontWeight: 700, color: '#1A1A1A', margin: 0, fontFamily: "'Inter', sans-serif" }}>
+                I&apos;m an Admin
+              </p>
+              <p style={{ fontSize: 12, color: '#6B7280', margin: '2px 0 0', fontFamily: "'Inter', sans-serif" }}>
+                SafeShift administrator
+              </p>
+            </div>
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ marginLeft: 'auto', flexShrink: 0 }}>
+              <path d="M6 4l4 4-4 4" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
+
+        <p style={{ textAlign: 'center', fontSize: '0.875rem', marginTop: '1.5em', color: '#666', fontFamily: "'Inter', sans-serif" }}>
+          New driver?{' '}
+          <Link href="/register" style={{ color: ORANGE, fontWeight: 600 }}>Register</Link>
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div style={{ background: '#ffffff', borderRadius: 16, padding: '2em' }}>
-      <Link href="/" style={{
+      <button onClick={() => { setRole(null); setError(''); setEmail(''); setPassword(''); }} style={{
         display: 'inline-flex', alignItems: 'center', gap: 4,
         fontSize: '0.8rem', fontWeight: 600, color: '#888',
-        textDecoration: 'none', marginBottom: '1em',
+        background: 'none', border: 'none', cursor: 'pointer',
+        marginBottom: '1em', padding: 0,
         fontFamily: "'Inter', sans-serif",
         transition: 'color 0.15s',
       }}
@@ -314,7 +436,7 @@ export default function LoginPage() {
           <path d="M9 2L4 7L9 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
         </svg>
         Back
-      </Link>
+      </button>
       <style>{`
         .ss-signin-btn {
           position: relative; overflow: hidden;
@@ -446,14 +568,14 @@ export default function LoginPage() {
 
       {/* ── Form ── */}
       <h2 style={{ fontSize:'1.25rem', fontWeight:700, color:'#1a1a1a', marginBottom:'1.25em', textAlign:'center', fontFamily:"'Inter',sans-serif" }}>
-        Sign In
+        {isAdminLogin ? 'Admin Login' : 'Sign In'}
       </h2>
 
       <form onSubmit={handleLogin} style={{ display:'flex', flexDirection:'column', gap:'1.25em' }}>
 
         {/* email */}
         <div>
-          <label style={labelStyle}>Email</label>
+          <label style={labelStyle}>Username</label>
           <input
             ref={emailRef}
             type="email"
@@ -462,7 +584,7 @@ export default function LoginPage() {
             onChange={handleEmailChange}
             onFocus={handleEmailFocus}
             onBlur={handleEmailBlur}
-            placeholder="user@safeshift.app"
+            placeholder={isAdminLogin ? 'username@safeshift.app' : 'registerednumber@safeshift.app'}
             required
             style={inputStyle}
           />
@@ -522,7 +644,7 @@ export default function LoginPage() {
             opacity: loading ? 0.6 : 1,
           }}
         >
-          <span>{loading ? 'Signing in…' : 'Sign In'}</span>
+          <span>{loading ? 'Signing in…' : isAdminLogin ? 'Admin Login' : 'Sign In'}</span>
         </button>
       </form>
 
@@ -531,5 +653,13 @@ export default function LoginPage() {
         <Link href="/register" style={{ color: ORANGE, fontWeight:600 }}>Register</Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 40, textAlign: 'center', color: '#9CA3AF' }}>Loading...</div>}>
+      <LoginContent />
+    </Suspense>
   );
 }

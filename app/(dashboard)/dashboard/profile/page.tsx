@@ -216,9 +216,8 @@ export default function ProfilePage() {
 
   const ACHIEVEMENTS = [
     { emoji: '🛡️', bg: '#FEF3E8', label: `${stats.policies} ${t('profile.policies')}` },
-    { emoji: '🔥', bg: '#FEF3E8', label: `${stats.streak}w ${t('profile.streak')}` },
+    { emoji: '🔥', bg: '#FEF3E8', label: `${stats.streak} week ${t('profile.streak')}` },
     { emoji: '💰', bg: '#FEF3E8', label: `${stats.claims} ${t('profile.claims')}` },
-    { emoji: '👥', bg: '#FEF3E8', label: '3 Referrals' },
   ];
 
   const DETAILS = [
@@ -226,7 +225,16 @@ export default function ProfilePage() {
     { label: 'City', value: zoneCode },
     { label: 'DL Number', value: profile.dl_number || '—' },
     { label: 'RC Number', value: profile.rc_number || '—' },
-    { label: 'UPI ID', value: profile.upi_id || '—' },
+    { label: 'Porter ID', value: (() => {
+      const name = profile.full_name?.trim().toLowerCase() || '';
+      const phone = profile.phone_number?.replace(/^\+?91/, '') || '';
+      if (!name || !phone) return '—';
+      // Same hash logic as verify-porter API
+      let hash = 0;
+      const raw = `${name}:${phone}`;
+      for (let i = 0; i < raw.length; i++) { hash = ((hash << 5) - hash) + raw.charCodeAt(i); hash |= 0; }
+      return 'PTR-' + Math.abs(hash).toString(16).toUpperCase().slice(0, 8);
+    })() },
     { label: 'Member Since', value: memberSince },
   ];
 

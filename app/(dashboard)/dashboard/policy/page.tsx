@@ -35,6 +35,9 @@ interface DashboardData {
     driver_zones: ZoneEntry[];
   };
   last_tier: string | null;
+  next_week_policy: { tier: string | null; name: string | null; premium: number; week_start: string } | null;
+  is_sunday_window: boolean;
+  next_renewal_date: string | null;
 }
 
 interface ZoneContribution {
@@ -544,10 +547,35 @@ export default function PolicyPage() {
 
       {!policy ? (
         <div style={{ textAlign: 'center', padding: '48px 0' }}>
-          {dashboard.last_tier ? (
+          {dashboard.next_week_policy ? (
+            <>
+              <div style={{
+                width: 48, height: 48, borderRadius: '50%', background: '#FEF3E8',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                margin: '0 auto 12px',
+              }}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F07820" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              </div>
+              <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: '#F07820' }}>
+                Policy Paid — Activates {(() => {
+                  const start = new Date(dashboard.next_week_policy!.week_start);
+                  const diff = Math.ceil((start.getTime() - Date.now()) / 86400000);
+                  return diff <= 1 ? 'Tomorrow' : `in ${diff} days`;
+                })()}
+              </p>
+              <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
+                {dashboard.next_week_policy.name || dashboard.next_week_policy.tier} plan · ₹{dashboard.next_week_policy.premium}/wk
+              </p>
+              <p className="sans" style={{ fontSize: 12, color: 'var(--ink-30)', marginTop: 4 }}>
+                Starts {new Date(dashboard.next_week_policy.week_start).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
+              </p>
+            </>
+          ) : dashboard.last_tier ? (
             <>
               <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: '#EF4444' }}>
-                Policy Expired
+                Policy Inactive
               </p>
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
                 Your {dashboard.last_tier} plan has expired. Reinstate to stay covered.
@@ -582,20 +610,20 @@ export default function PolicyPage() {
           ) : (
             <>
               <p className="serif" style={{ fontSize: 18, fontWeight: 700, color: 'var(--ink)' }}>
-                {t('policy2.noPolicy')}
+                No active policy
               </p>
               <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', marginTop: 6 }}>
-                {t('policy2.noPolicyDesc')}
+                Subscribe to a plan to get coverage.
               </p>
               <a
                 href="/dashboard/policy/purchase"
                 style={{
                   display: 'inline-block', marginTop: 16, padding: '10px 24px',
-                  borderRadius: 8, background: '#F07820', color: 'var(--cream)',
+                  borderRadius: 8, background: '#F07820', color: '#fff',
                   fontWeight: 600, fontSize: 14, textDecoration: 'none',
                 }}
               >
-                {t('policy2.getCovered')}
+                Get Covered
               </a>
             </>
           )}

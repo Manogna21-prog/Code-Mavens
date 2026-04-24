@@ -638,13 +638,13 @@ export default function DashboardHomePage() {
           /* ── STATE B: Paid but not yet active (waiting for Monday) ── */
           <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s', textAlign: 'center', padding: '28px 20px' }}>
             <div style={{
-              width: 48, height: 48, borderRadius: '50%', background: '#EEF2FF',
+              width: 48, height: 48, borderRadius: '50%', background: '#FEF3E8',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               margin: '0 auto 12px',
             }}>
-              <Shield size={22} color="#1A40C0" strokeWidth={2} />
+              <Shield size={22} color="#F07820" strokeWidth={2} />
             </div>
-            <p style={{ fontSize: 16, fontWeight: 700, color: '#1A40C0', marginBottom: 4, fontFamily: F }}>
+            <p style={{ fontSize: 16, fontWeight: 700, color: '#F07820', marginBottom: 4, fontFamily: F }}>
               Policy Paid — Activates {(() => {
                 const start = new Date(data.next_week_policy.week_start);
                 const now = new Date();
