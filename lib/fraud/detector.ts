@@ -1,139 +1,50 @@
 // ============================================================================
-// Pre-Claim Fraud Detection Pipeline
-// Orchestrates all fraud checks and computes composite fraud_score
-// Integrates: duplicate, rapid claims, weather mismatch, location integrity,
-//             impossible travel, cluster analysis, trust score weighting
+// Fraud Detection — gathers signal inputs and runs the scoring model
+//
+// Signals the driver/ring can actually control:
+//   trust_history    40%   (prior flags + trust score)
+//   location_anomaly 35%   (GPS vs IP + impossible travel)
+//   cluster          25%   (shared devices/IPs/GPS across accounts)
+//
+// Signals we previously (wrongly) counted as fraud but that drivers don't
+// control — duplicate claim, rapid claims, weather mismatch — are removed from
+// the fraud path. They remain system-health concerns to be surfaced elsewhere.
 // ============================================================================
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { FRAUD } from '@/lib/config/constants';
+import {
+  computeFraudScore,
+  type FraudScoreResult,
+  type FraudSignalsInput,
+} from '@/lib/fraud/scoring';
+import { getTrustHistoryInput } from '@/lib/fraud/trust-history';
 import { checkLocationIntegrity, checkImpossibleTravel } from '@/lib/fraud/location-integrity';
 import { checkClusterAnomaly } from '@/lib/fraud/cluster-analysis';
+import { haversineDistance } from '@/lib/utils/geo';
 import type { ParametricClaim, LiveDisruptionEvent } from '@/lib/types/database';
 
-interface FraudCheckResult {
+export interface FraudCheckResult {
   isFlagged: boolean;
   fraudScore: number;
+  // Flat boolean view — shape preserved for engine.ts / fraud_signals JSONB column.
+  // Legacy signal keys (duplicate, rapid_claims, weather_mismatch, daily_limit_exceeded)
+  // are kept as `false` so any existing consumer (fraud-center page) still compiles.
   signals: Record<string, boolean>;
   reasons: string[];
+  // Rich detail — not persisted but returned for the admin simulator.
+  breakdown: FraudScoreResult['contributions'];
+  decision: FraudScoreResult['decision'];
 }
 
 /**
- * Check for duplicate claim: same policy + same event = reject
+ * Update trust score after a fraud determination. Preserved for
+ * lib/claims/engine.ts and lib/adjudicator/claims.ts which import it.
  */
-export async function checkDuplicateClaim(policyId: string, eventId: string): Promise<boolean> {
-  const supabase = createAdminClient();
-
-  const { count } = await supabase
-    .from('parametric_claims')
-    .select('*', { count: 'exact', head: true })
-    .eq('policy_id', policyId)
-    .eq('disruption_event_id', eventId);
-
-  // More than 1 means a duplicate exists (current claim is already in DB)
-  return (count ?? 0) > 1;
-}
-
-/**
- * Check for rapid claims: >= THRESHOLD claims in 24 hours = flag
- */
-export async function checkRapidClaims(profileId: string): Promise<boolean> {
-  const supabase = createAdminClient();
-
-  const windowStart = new Date(
-    Date.now() - FRAUD.RAPID_CLAIM_WINDOW_HOURS * 60 * 60 * 1000
-  ).toISOString();
-
-  const { count } = await supabase
-    .from('parametric_claims')
-    .select('*', { count: 'exact', head: true })
-    .eq('profile_id', profileId)
-    .gte('created_at', windowStart);
-
-  return (count ?? 0) >= FRAUD.RAPID_CLAIM_THRESHOLD;
-}
-
-/**
- * Check weather data mismatch: re-verify that event API data matches trigger
- */
-export async function checkWeatherMismatch(eventId: string): Promise<boolean> {
-  const supabase = createAdminClient();
-
-  const { data: eventRaw } = await supabase
-    .from('live_disruption_events')
-    .select('*')
-    .eq('id', eventId)
-    .single();
-
-  if (!eventRaw) return false;
-
-  const event = eventRaw as unknown as LiveDisruptionEvent;
-
-  // If the event was not verified by API, flag it
-  if (!event.verified_by_api) {
-    return true;
-  }
-
-  // If no trigger value or threshold recorded, flag as suspicious
-  if (event.trigger_value == null || event.trigger_threshold == null) {
-    return true;
-  }
-
-  // If trigger value is below threshold, flag as mismatch
-  if (event.trigger_value < event.trigger_threshold) {
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Check daily claim limit for profile — FIXED: compare against MAX_CLAIMS_PER_DAY
- */
-export async function checkDailyLimit(profileId: string): Promise<boolean> {
-  const supabase = createAdminClient();
-
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-
-  const { count } = await supabase
-    .from('parametric_claims')
-    .select('*', { count: 'exact', head: true })
-    .eq('profile_id', profileId)
-    .gte('created_at', todayStart.toISOString());
-
-  // FIX: was `> 1`, now correctly compares against the actual limit
-  return (count ?? 0) >= 5; // CLAIM_RULES.MAX_CLAIMS_PER_DAY
-}
-
-/**
- * Get driver's trust score (lower = more suspicious)
- * Returns a fraud bonus: low trust adds to fraud score
- */
-async function getTrustScorePenalty(profileId: string): Promise<number> {
-  const supabase = createAdminClient();
-
-  const { data: profileRaw } = await supabase
-    .from('profiles')
-    .select('trust_score')
-    .eq('id', profileId)
-    .single();
-
-  const profile = profileRaw as unknown as { trust_score: number } | null;
-  const trustScore = profile?.trust_score ?? FRAUD.TRUST_SCORE_DEFAULT;
-
-  // Trust score is 0.0-1.0. Low trust = high fraud penalty.
-  // Default 0.50 → 0 penalty. 0.0 → +0.15 penalty. 1.0 → -0.05 bonus.
-  if (trustScore < 0.3) return 0.15;  // Very low trust — significant penalty
-  if (trustScore < 0.5) return 0.05;  // Below average — small penalty
-  if (trustScore > 0.8) return -0.05; // High trust — small bonus (reward clean history)
-  return 0; // Average trust — no adjustment
-}
-
-/**
- * Update trust score after fraud determination
- */
-export async function updateTrustScore(profileId: string, isClean: boolean): Promise<void> {
+export async function updateTrustScore(
+  profileId: string,
+  isClean: boolean
+): Promise<void> {
   const supabase = createAdminClient();
 
   const { data: profileRaw } = await supabase
@@ -146,8 +57,8 @@ export async function updateTrustScore(profileId: string, isClean: boolean): Pro
   const currentScore = profile?.trust_score ?? FRAUD.TRUST_SCORE_DEFAULT;
 
   const adjustment = isClean
-    ? FRAUD.TRUST_SCORE_CLEAN_CLAIM   // +0.05 for clean claim
-    : FRAUD.TRUST_SCORE_FRAUD_CONFIRMED; // -0.20 for confirmed fraud
+    ? FRAUD.TRUST_SCORE_CLEAN_CLAIM
+    : FRAUD.TRUST_SCORE_FRAUD_CONFIRMED;
 
   const newScore = Math.min(1.0, Math.max(0.0, currentScore + adjustment));
 
@@ -157,14 +68,12 @@ export async function updateTrustScore(profileId: string, isClean: boolean): Pro
     .eq('id', profileId);
 }
 
-/**
- * Orchestrate ALL fraud checks and compute weighted fraud_score
- * Now includes: location integrity, impossible travel, cluster analysis, trust score
- */
-export async function runAllFraudChecks(claimId: string): Promise<FraudCheckResult> {
+export async function runAllFraudChecks(
+  claimId: string,
+  ipAddress?: string
+): Promise<FraudCheckResult> {
   const supabase = createAdminClient();
 
-  // Fetch claim with event and profile data
   const { data: claimRaw } = await supabase
     .from('parametric_claims')
     .select('*, live_disruption_events(*)')
@@ -172,149 +81,184 @@ export async function runAllFraudChecks(claimId: string): Promise<FraudCheckResu
     .single();
 
   if (!claimRaw) {
-    return { isFlagged: false, fraudScore: 0, signals: {}, reasons: [] };
+    return emptyResult();
   }
 
-  const claim = claimRaw as unknown as ParametricClaim & { live_disruption_events: LiveDisruptionEvent };
+  const claim = claimRaw as unknown as ParametricClaim & {
+    live_disruption_events: LiveDisruptionEvent;
+  };
   const event = claim.live_disruption_events;
 
-  // Get driver's latest activity log for GPS + IP
-  const { data: latestLogRaw } = await supabase
+  // Latest GPS heartbeat — needed for location & impossible-travel checks
+  const { data: lastLogRaw } = await supabase
     .from('driver_activity_logs')
-    .select('latitude, longitude, ip_address')
+    .select('latitude, longitude, ip_address, ip_geo_latitude, ip_geo_longitude')
     .eq('profile_id', claim.profile_id)
     .order('recorded_at', { ascending: false })
     .limit(1)
     .single();
 
-  const latestLog = latestLogRaw as unknown as {
+  const lastLog = lastLogRaw as unknown as {
     latitude: number | null;
     longitude: number | null;
     ip_address: string | null;
+    ip_geo_latitude: number | null;
+    ip_geo_longitude: number | null;
   } | null;
 
-  // ── Run all checks in parallel ──────────────────────────────────────
+  const gpsLat = lastLog?.latitude ?? null;
+  const gpsLng = lastLog?.longitude ?? null;
+  const effectiveIp = ipAddress ?? lastLog?.ip_address ?? undefined;
 
-  const [duplicate, rapidClaims, weatherMismatch, dailyLimit] = await Promise.all([
-    checkDuplicateClaim(claim.policy_id, claim.disruption_event_id),
-    checkRapidClaims(claim.profile_id),
-    checkWeatherMismatch(claim.disruption_event_id),
-    checkDailyLimit(claim.profile_id),
+  // Gather all signal inputs in parallel
+  const [trust, locationIntegrity, impossibleTravel, cluster] = await Promise.all([
+    getTrustHistoryInput(claim.profile_id),
+    gpsLat != null && gpsLng != null
+      ? checkLocationIntegrity(gpsLat, gpsLng, effectiveIp)
+      : Promise.resolve({ locationAnomaly: false, gpsAccuracyFlag: false, reason: undefined as string | undefined }),
+    gpsLat != null && gpsLng != null
+      ? checkImpossibleTravel(claim.profile_id, gpsLat, gpsLng)
+      : Promise.resolve(false),
+    checkClusterAnomaly(claim.disruption_event_id),
   ]);
 
-  // ── Location integrity (GPS vs IP) ──────────────────────────────────
-  let locationAnomaly = false;
-  let impossibleTravel = false;
-  const reasons: string[] = [];
-
-  if (latestLog?.latitude != null && latestLog?.longitude != null) {
-    // Check GPS vs IP mismatch
-    const locationResult = await checkLocationIntegrity(
-      latestLog.latitude,
-      latestLog.longitude,
-      latestLog.ip_address ?? undefined
+  // GPS↔IP distance if we already have both sides cached on the log
+  let gpsToIpDistanceKm: number | null = null;
+  if (
+    gpsLat != null && gpsLng != null &&
+    lastLog?.ip_geo_latitude != null && lastLog?.ip_geo_longitude != null
+  ) {
+    gpsToIpDistanceKm = haversineDistance(
+      gpsLat, gpsLng,
+      lastLog.ip_geo_latitude, lastLog.ip_geo_longitude
     );
-    locationAnomaly = locationResult.locationAnomaly;
-    if (locationAnomaly) {
-      reasons.push(locationResult.reason || 'GPS/IP location mismatch');
-    }
-
-    // Check impossible travel
-    impossibleTravel = await checkImpossibleTravel(
-      claim.profile_id,
-      latestLog.latitude,
-      latestLog.longitude
-    );
-    if (impossibleTravel) {
-      reasons.push(`Impossible travel: >50km in 30min detected`);
-    }
+  } else if (locationIntegrity.locationAnomaly) {
+    // Fallback: live IP lookup already flagged it
+    gpsToIpDistanceKm = 999;
   }
 
-  // ── Cluster analysis (syndicate detection) ──────────────────────────
-  let clusterFlag = false;
-  const clusterResult = await checkClusterAnomaly(claim.disruption_event_id);
-  if (clusterResult.isSuspicious) {
-    clusterFlag = true;
-    reasons.push(clusterResult.reason || 'Syndicate cluster detected');
-
-    // Write cluster signal to fraud_cluster_signals table
-    try {
-      const windowStart = new Date(Date.now() - FRAUD.CLUSTER_WINDOW_MINUTES * 60 * 1000).toISOString();
-      const { data: firstClaim } = await supabase
-        .from('parametric_claims')
-        .select('created_at')
-        .eq('disruption_event_id', claim.disruption_event_id)
-        .gte('created_at', windowStart)
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .single();
-      const { data: lastClaim } = await supabase
-        .from('parametric_claims')
-        .select('created_at')
-        .eq('disruption_event_id', claim.disruption_event_id)
-        .gte('created_at', windowStart)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (firstClaim && lastClaim) {
-        const first = firstClaim as unknown as { created_at: string };
-        const last = lastClaim as unknown as { created_at: string };
-        const windowSeconds = Math.round((new Date(last.created_at).getTime() - new Date(first.created_at).getTime()) / 1000);
-
-        await supabase.from('fraud_cluster_signals').upsert({
-          disruption_event_id: claim.disruption_event_id,
-          event_type: event?.event_type || null,
-          city: event?.city || null,
-          claim_count: clusterResult.claimCount,
-          first_claim_at: first.created_at,
-          last_claim_at: last.created_at,
-          window_seconds: windowSeconds,
-          unique_devices: clusterResult.uniqueDevices,
-          flag_rate: 1.0,
-        } as never, { onConflict: 'disruption_event_id' });
-      }
-    } catch {
-      // Best effort — don't fail the fraud check if cluster logging fails
-    }
-  }
-
-  // ── Trust score penalty ─────────────────────────────────────────────
-  const trustPenalty = await getTrustScorePenalty(claim.profile_id);
-
-  // ── Build signals ───────────────────────────────────────────────────
-
-  const signals: Record<string, boolean> = {
-    duplicate,
-    rapid_claims: rapidClaims,
-    weather_mismatch: weatherMismatch,
-    daily_limit_exceeded: dailyLimit,
-    location_anomaly: locationAnomaly || impossibleTravel,
-    cluster: clusterFlag,
+  const input: FraudSignalsInput = {
+    trust_history: trust,
+    location_anomaly: { gpsToIpDistanceKm, impossibleTravel },
+    cluster: {
+      claimCountInWindow: cluster.claimCount,
+      uniqueDevices: cluster.uniqueDevices,
+      sharedIpsAcrossProfiles: cluster.suspiciousDimensions.includes('shared_ips') ? 1 : 0,
+      lowGpsEntropy: cluster.suspiciousDimensions.includes('low_gps_entropy'),
+    },
   };
 
-  // Log individual reasons
-  if (duplicate) reasons.push('Duplicate claim for same policy + event');
-  if (rapidClaims) reasons.push(`${FRAUD.RAPID_CLAIM_THRESHOLD}+ claims in ${FRAUD.RAPID_CLAIM_WINDOW_HOURS}h`);
-  if (weatherMismatch) reasons.push('Weather data mismatch — trigger value below threshold or unverified');
-  if (dailyLimit) reasons.push('Daily claim limit exceeded');
+  const result = computeFraudScore(input);
 
-  // ── Compute weighted fraud score ────────────────────────────────────
+  // Flatten signals + collect human-readable reasons
+  const reasons: string[] = [];
+  for (const c of result.contributions) {
+    if (c.triggered) reasons.push(c.reason);
+  }
+  if (locationIntegrity.locationAnomaly && locationIntegrity.reason) {
+    reasons.push(locationIntegrity.reason);
+  }
 
-  let fraudScore = 0;
-  if (signals.duplicate)           fraudScore += FRAUD.WEIGHTS.duplicate;        // +0.30
-  if (signals.rapid_claims)        fraudScore += FRAUD.WEIGHTS.rapid_claims;     // +0.20
-  if (signals.weather_mismatch)    fraudScore += FRAUD.WEIGHTS.weather_mismatch; // +0.15
-  if (signals.location_anomaly)    fraudScore += FRAUD.WEIGHTS.location_anomaly; // +0.25
-  if (signals.cluster)             fraudScore += FRAUD.WEIGHTS.cluster;          // +0.10
+  // Preserve the cluster audit side-effect: record ring alerts to the
+  // fraud_cluster_signals table so the Fraud Center can show them.
+  if (cluster.isSuspicious) {
+    await logClusterSignal(claim.disruption_event_id, event, cluster);
+  }
 
-  // Apply trust score adjustment
-  fraudScore += trustPenalty;
+  const signals: Record<string, boolean> = {
+    // New signals
+    trust_history: result.triggeredSignals.trust_history,
+    location_anomaly: result.triggeredSignals.location_anomaly,
+    cluster: result.triggeredSignals.cluster,
+    // Legacy keys — kept as false for backward-compat with older UI views
+    duplicate: false,
+    rapid_claims: false,
+    weather_mismatch: false,
+    daily_limit_exceeded: false,
+  };
 
-  // Clamp to [0, 1]
-  fraudScore = Math.min(1, Math.max(0, fraudScore));
+  return {
+    isFlagged: result.decision !== 'auto_approve',
+    fraudScore: result.score,
+    signals,
+    reasons,
+    breakdown: result.contributions,
+    decision: result.decision,
+  };
+}
 
-  const isFlagged = fraudScore >= FRAUD.AUTO_APPROVE_THRESHOLD;
+async function logClusterSignal(
+  eventId: string,
+  event: LiveDisruptionEvent | null,
+  clusterResult: { claimCount: number; uniqueDevices: number }
+): Promise<void> {
+  const supabase = createAdminClient();
 
-  return { isFlagged, fraudScore, signals, reasons };
+  try {
+    const windowStart = new Date(
+      Date.now() - FRAUD.CLUSTER_WINDOW_MINUTES * 60 * 1000
+    ).toISOString();
+
+    const { data: firstClaim } = await supabase
+      .from('parametric_claims')
+      .select('created_at')
+      .eq('disruption_event_id', eventId)
+      .gte('created_at', windowStart)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .single();
+
+    const { data: lastClaim } = await supabase
+      .from('parametric_claims')
+      .select('created_at')
+      .eq('disruption_event_id', eventId)
+      .gte('created_at', windowStart)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!firstClaim || !lastClaim) return;
+
+    const first = firstClaim as unknown as { created_at: string };
+    const last = lastClaim as unknown as { created_at: string };
+    const windowSeconds = Math.round(
+      (new Date(last.created_at).getTime() - new Date(first.created_at).getTime()) / 1000
+    );
+
+    await supabase.from('fraud_cluster_signals').upsert(
+      {
+        disruption_event_id: eventId,
+        event_type: event?.event_type ?? null,
+        city: event?.city ?? null,
+        claim_count: clusterResult.claimCount,
+        first_claim_at: first.created_at,
+        last_claim_at: last.created_at,
+        window_seconds: windowSeconds,
+        unique_devices: clusterResult.uniqueDevices,
+        flag_rate: 1.0,
+      } as never,
+      { onConflict: 'disruption_event_id' }
+    );
+  } catch {
+    // Best effort — don't fail the fraud check if cluster logging fails
+  }
+}
+
+function emptyResult(): FraudCheckResult {
+  return {
+    isFlagged: false,
+    fraudScore: 0,
+    signals: {
+      trust_history: false,
+      location_anomaly: false,
+      cluster: false,
+      duplicate: false,
+      rapid_claims: false,
+      weather_mismatch: false,
+      daily_limit_exceeded: false,
+    },
+    reasons: [],
+    breakdown: [],
+    decision: 'auto_approve',
+  };
 }

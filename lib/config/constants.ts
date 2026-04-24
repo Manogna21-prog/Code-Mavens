@@ -195,31 +195,41 @@ export const CLAIM_RULES = {
 } as const;
 
 // --- Fraud Detection ---
+// Only signals the driver/ring can actually control are weighted.
+// Duplicate/rapid/weather-mismatch are system-health concerns (handled elsewhere),
+// not fraud — because drivers don't initiate claims in a parametric model.
+// Legacy keys are kept at weight 0 so older UI code (fraud-center) still compiles.
 export const FRAUD = {
-  RAPID_CLAIM_THRESHOLD: 3,         // >=3 claims in 24h = flag
-  RAPID_CLAIM_WINDOW_HOURS: 24,
-  LOCATION_MISMATCH_KM: 50,         // GPS vs IP >50km = flag
+  // Location integrity thresholds
+  LOCATION_MISMATCH_KM: 50,          // GPS vs IP >50km = anomaly
   GPS_MAX_ACCURACY_METERS: 100,
-  IMPOSSIBLE_TRAVEL_KM: 50,          // >50km in 30min
+  IMPOSSIBLE_TRAVEL_KM: 50,          // >50km in 30min = spoof
   IMPOSSIBLE_TRAVEL_MINUTES: 30,
-  CLUSTER_THRESHOLD: 10,             // >=10 claims in window = cluster
+  // Cluster (ring) detection thresholds
+  CLUSTER_THRESHOLD: 10,             // >=10 claims on one event in window
   CLUSTER_WINDOW_MINUTES: 10,
-  // Fraud score routing
-  AUTO_APPROVE_THRESHOLD: 0.3,       // <0.3 = auto-approve
-  MANUAL_REVIEW_THRESHOLD: 0.7,      // >0.7 = manual review
-  // Fraud score weights
-  WEIGHTS: {
-    duplicate: 0.30,
-    rapid_claims: 0.20,
-    location_anomaly: 0.25,
-    weather_mismatch: 0.15,
-    cluster: 0.10,
-  },
-  // Trust score
+  CLUSTER_SHARED_DEVICE_RATIO: 0.5,  // <50% unique devices = shared
+  CLUSTER_GPS_ENTROPY_STD: 0.001,    // lat/lng std dev below this = clustered
+  // Trust / history
   TRUST_SCORE_DEFAULT: 0.50,
   TRUST_SCORE_CLEAN_CLAIM: 0.05,
   TRUST_SCORE_FRAUD_CONFIRMED: -0.20,
   TRUST_SCORE_SIX_MONTH_BONUS: 0.10,
+  TRUST_SCORE_BOUND_DOWN: -0.40,     // max penalty applied to score
+  TRUST_SCORE_BOUND_UP: 0.40,        // max bonus applied to score
+  // Fraud score routing
+  AUTO_APPROVE_THRESHOLD: 0.3,       // <0.3 = auto-approve
+  MANUAL_REVIEW_THRESHOLD: 0.7,      // >=0.7 = manual review
+  // Active weighted signals — sum to 1.0
+  WEIGHTS: {
+    trust_history: 0.40,             // prior flags + trust score (strongest predictor)
+    location_anomaly: 0.35,          // GPS vs IP + impossible travel
+    cluster: 0.25,                   // shared devices / IPs / GPS across accounts
+    // --- Legacy (system-health, not driver-controlled) — kept at 0 for compat ---
+    duplicate: 0,
+    rapid_claims: 0,
+    weather_mismatch: 0,
+  },
 } as const;
 
 // --- Rewards / Coins ---

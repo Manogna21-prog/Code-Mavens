@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Map, Zap, Shield, FileText, DollarSign, LogOut, ScrollText, HeartPulse, ShieldAlert } from 'lucide-react';
+import { LayoutDashboard, Map, Zap, Shield, FileText, DollarSign, LogOut, ScrollText, HeartPulse, ShieldAlert, FlaskConical } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 const navItems = [
@@ -13,6 +13,7 @@ const navItems = [
   { href: '/admin/claims', label: 'Claim Center', icon: FileText },
   { href: '/admin/billing', label: 'Billing Center', icon: DollarSign },
   { href: '/admin/fraud-center', label: 'Fraud Center', icon: ShieldAlert },
+  { href: '/admin/fraud/simulator', label: 'Fraud Simulator', icon: FlaskConical },
   { href: '/admin/system-logs', label: 'System Logs', icon: ScrollText },
   { href: '/admin/api-health', label: 'API Health', icon: HeartPulse },
 ];
