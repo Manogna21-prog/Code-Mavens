@@ -88,6 +88,9 @@ function LoginContent() {
     const emailEl = emailRef.current;
     const svgEl   = svgWrapRef.current;
     if (!emailEl || !svgEl) return;
+    // Also guard against the SVG being mounted while one or more inner
+    // face parts aren't yet attached (rare, but GSAP throws on any null).
+    if (!eyeLRef.current || !eyeRRef.current || !mouthRef.current) return;
 
     const svgC  = getElPosition(svgEl);
     const emC   = getElPosition(emailEl);
@@ -148,6 +151,10 @@ function LoginContent() {
   }, []);
 
   const resetFace = useCallback(() => {
+    // Guard: SVG may be unmounted (role picker shown, navigation) when a
+    // delayed blur handler fires. GSAP throws "Cannot read _gsap of null"
+    // if any target in an array is null, so bail early if the face is gone.
+    if (!eyeLRef.current || !eyeRRef.current) return;
     gsap.to([eyeLRef.current, eyeRRef.current], { duration:1, x:0, y:0, ease:'expo.out' });
     gsap.to(noseRef.current,  { duration:1, x:0, y:0, scaleX:1, scaleY:1, ease:'expo.out' });
     gsap.to(mouthRef.current, { duration:1, x:0, y:0, rotation:0, ease:'expo.out' });
@@ -158,6 +165,7 @@ function LoginContent() {
   }, []);
 
   const coverEyes = useCallback(() => {
+    if (!armLRef.current || !armRRef.current) return;
     gsap.killTweensOf([armLRef.current, armRRef.current]);
     gsap.set([armLRef.current, armRRef.current], { visibility:'visible' });
     gsap.to(armLRef.current, { duration:.45, x:-93, y:10, rotation:0, ease:'quad.out' });
@@ -168,6 +176,7 @@ function LoginContent() {
   }, []);
 
   const uncoverEyes = useCallback(() => {
+    if (!armLRef.current || !armRRef.current) return;
     gsap.killTweensOf([armLRef.current, armRRef.current]);
     gsap.to(armLRef.current, { duration:1.35, y:220, ease:'quad.out' });
     gsap.to(armLRef.current, { duration:1.35, rotation:105, ease:'quad.out', delay:.1 });
