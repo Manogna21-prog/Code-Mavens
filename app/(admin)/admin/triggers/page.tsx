@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { createClient } from '@/lib/supabase/client';
 import { CITIES } from '@/lib/config/cities';
 import { DISRUPTION_TYPES, TRIGGERS } from '@/lib/config/constants';
+import { getZonesForCity, type CityZone } from '@/lib/config/zones';
 import { RING_SIZE_BY_TYPE, disk, toCell } from '@/lib/utils/h3';
 import type { DisruptionType } from '@/lib/config/constants';
 import type { RiderPoint, EventOverlay } from '@/components/admin/ZoneH3Map';
@@ -165,12 +166,26 @@ export default function AdminTriggersPage() {
 
   // Zone-level (H3) controls
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
+  const [zoneId, setZoneId] = useState<string>(''); // '' = city-wide
   const [ringSize, setRingSize] = useState<number>(RING_SIZE_BY_TYPE[DISRUPTION_TYPES[0]]);
   const [riders, setRiders] = useState<RiderPoint[]>([]);
   const [activeEvents, setActiveEvents] = useState<EventOverlay[]>([]);
 
   const demoCityMeta = useMemo(() => CITIES.find((c) => c.slug === demoCity) ?? CITIES[0], [demoCity]);
   const demoMapCenter: [number, number] = [demoCityMeta.latitude, demoCityMeta.longitude];
+  const cityZones: CityZone[] = useMemo(() => getZonesForCity(demoCity), [demoCity]);
+  const selectedZone = useMemo(() => cityZones.find((z) => z.zone_id === zoneId), [cityZones, zoneId]);
+
+  // When city changes, clear the zone + pin (they belonged to the previous city).
+  useEffect(() => { setZoneId(''); setPin(null); }, [demoCity]);
+
+  // Picking a zone from the dropdown drops the pin at its centroid.
+  function handleZoneChange(newId: string) {
+    setZoneId(newId);
+    if (!newId) { setPin(null); return; }
+    const z = cityZones.find((zz) => zz.zone_id === newId);
+    if (z) setPin({ lat: z.lat, lng: z.lng });
+  }
 
   // Re-snap ring size to the recommended default when event type changes
   useEffect(() => { setRingSize(RING_SIZE_BY_TYPE[demoEventType]); }, [demoEventType]);
@@ -529,27 +544,35 @@ export default function AdminTriggersPage() {
             events={activeEvents}
             pin={pin}
             previewCells={previewCells}
-            onPin={(lat, lng) => setPin({ lat, lng })}
+            onPin={(lat, lng) => { setPin({ lat, lng }); setZoneId(''); }}
             resolutionLabel="H3 res-8 · click to drop pin"
           />
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', marginTop: 10 }}>
-            <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontSize: 11, color: '#6B7280', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <Hexagon size={13} style={{ color: NEON.orange }} />
-              {pin ? (
+              {selectedZone ? (
                 <>
-                  Pin at <span style={{ fontFamily: M, color: '#1A1A1A' }}>{pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}</span> —
+                  Zone <span style={{ fontFamily: F, fontWeight: 700, color: '#1A1A1A' }}>{selectedZone.name}</span> —
+                  <span style={{ fontFamily: M, color: '#9A3412' }}>{pin ? toCell(pin.lat, pin.lng) : ''}</span>
+                </>
+              ) : pin ? (
+                <>
+                  Custom pin <span style={{ fontFamily: M, color: '#1A1A1A' }}>{pin.lat.toFixed(4)}, {pin.lng.toFixed(4)}</span> —
                   <span style={{ fontFamily: M, color: '#9A3412' }}>{toCell(pin.lat, pin.lng)}</span>
                 </>
               ) : (
                 <>No pin — firing at {demoCityMeta.name} centroid</>
               )}
-              <span style={{ marginLeft: 12, fontFamily: M, color: NEON.orange, fontWeight: 700 }}>
-                {previewCells.length} cells · {previewRiders.length} eligible rider{previewRiders.length === 1 ? '' : 's'}
+              <span style={{ marginLeft: 4, fontFamily: M, color: NEON.orange, fontWeight: 700 }}>
+                · {previewCells.length} cells · {previewRiders.length} eligible rider{previewRiders.length === 1 ? '' : 's'}
               </span>
             </div>
-            {pin && (
-              <button onClick={() => setPin(null)} style={{ fontSize: 11, fontFamily: M, border: '1px solid #E8E8EA', padding: '3px 10px', borderRadius: 8, background: '#fff', color: '#6B7280', cursor: 'pointer' }}>
-                Clear pin
+            {(pin || zoneId) && (
+              <button
+                onClick={() => { setPin(null); setZoneId(''); }}
+                style={{ fontSize: 11, fontFamily: M, border: '1px solid #E8E8EA', padding: '3px 10px', borderRadius: 8, background: '#fff', color: '#6B7280', cursor: 'pointer' }}
+              >
+                Clear
               </button>
             )}
           </div>
@@ -606,14 +629,30 @@ export default function AdminTriggersPage() {
 
           {/* RIGHT: Form fields + button */}
           <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {/* City */}
-            <div>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#1A1A1A', marginBottom: 4, fontFamily: M }}>
-                <MapPin size={12} style={{ color: NEON.blue }} /> City
-              </label>
-              <select value={demoCity} onChange={(e) => setDemoCity(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm" style={{ border: '1.5px solid #E8E8EA', transition: 'all 0.2s', outline: 'none' }} onFocus={e => { e.currentTarget.style.borderColor = NEON.purple; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.1)'; }} onBlur={e => { e.currentTarget.style.borderColor = '#E8E8EA'; e.currentTarget.style.boxShadow = 'none'; }}>
-                {CITIES.map((c) => <option key={c.slug} value={c.slug}>{c.name} ({c.state})</option>)}
-              </select>
+            {/* City + Zone (side by side) */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#1A1A1A', marginBottom: 4, fontFamily: M }}>
+                  <MapPin size={12} style={{ color: NEON.blue }} /> City
+                </label>
+                <select value={demoCity} onChange={(e) => setDemoCity(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm" style={{ border: '1.5px solid #E8E8EA', transition: 'all 0.2s', outline: 'none' }} onFocus={e => { e.currentTarget.style.borderColor = NEON.purple; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(139,92,246,0.1)'; }} onBlur={e => { e.currentTarget.style.borderColor = '#E8E8EA'; e.currentTarget.style.boxShadow = 'none'; }}>
+                  {CITIES.map((c) => <option key={c.slug} value={c.slug}>{c.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11, fontWeight: 600, color: '#1A1A1A', marginBottom: 4, fontFamily: M }}>
+                  <Hexagon size={12} style={{ color: NEON.orange }} /> Zone
+                </label>
+                <select value={zoneId} onChange={(e) => handleZoneChange(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm" style={{ border: '1.5px solid #E8E8EA', transition: 'all 0.2s', outline: 'none' }} onFocus={e => { e.currentTarget.style.borderColor = NEON.orange; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(249,115,22,0.12)'; }} onBlur={e => { e.currentTarget.style.borderColor = '#E8E8EA'; e.currentTarget.style.boxShadow = 'none'; }}>
+                  <option value="">— whole city (centroid) —</option>
+                  {cityZones.map((z) => <option key={z.zone_id} value={z.zone_id}>{z.name}</option>)}
+                </select>
+                {selectedZone && (
+                  <div style={{ fontSize: 9, color: '#9CA3AF', fontFamily: M, marginTop: 3 }}>
+                    risk {(selectedZone.risk_score * 100).toFixed(0)}% · {selectedZone.risk_factors.slice(0, 2).join(', ')}
+                  </div>
+                )}
+              </div>
             </div>
             {/* Disruption Type */}
             <div>
@@ -664,9 +703,11 @@ export default function AdminTriggersPage() {
               <Zap size={14} />
               {demoLoading
                 ? 'Firing...'
-                : pin
-                  ? `Fire at pin · ${previewRiders.length} rider${previewRiders.length === 1 ? '' : 's'}`
-                  : 'Fire at city centroid'}
+                : selectedZone
+                  ? `Fire in ${selectedZone.name} · ${previewRiders.length} rider${previewRiders.length === 1 ? '' : 's'}`
+                  : pin
+                    ? `Fire at pin · ${previewRiders.length} rider${previewRiders.length === 1 ? '' : 's'}`
+                    : 'Fire at city centroid'}
             </button>
           </div>
         </div>

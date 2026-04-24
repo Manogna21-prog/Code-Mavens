@@ -2,13 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, Map, Zap, Shield, FileText, DollarSign, LogOut, ScrollText, HeartPulse, ShieldAlert, Hexagon } from 'lucide-react';
+import { LayoutDashboard, Map, Zap, Shield, FileText, DollarSign, LogOut, ScrollText, HeartPulse, ShieldAlert } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
   { href: '/admin/risk-map', label: 'Risk Map & Forecast', icon: Map },
-  { href: '/admin/zones', label: 'Zone Map', icon: Hexagon },
   { href: '/admin/triggers', label: 'Triggers', icon: Zap },
   { href: '/admin/policies', label: 'Policy Center', icon: Shield },
   { href: '/admin/claims', label: 'Claim Center', icon: FileText },
