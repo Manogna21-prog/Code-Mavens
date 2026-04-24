@@ -7,6 +7,7 @@ import { parseBody, errorResponse, successResponse } from '@/lib/utils/api';
 import { getSession } from '@/lib/utils/auth';
 import { activityLogSchema } from '@/lib/validations/schemas';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { toCell } from '@/lib/utils/h3';
 
 export async function POST(request: Request) {
   try {
@@ -23,6 +24,12 @@ export async function POST(request: Request) {
     const forwarded = request.headers.get('x-forwarded-for');
     const ipAddress = forwarded?.split(',')[0]?.trim() ?? null;
 
+    // Compute H3 cell if we have a position
+    const h3Cell =
+      body.latitude != null && body.longitude != null
+        ? toCell(body.latitude, body.longitude)
+        : null;
+
     const { error } = await supabase
       .from('driver_activity_logs')
       .insert({
@@ -30,6 +37,7 @@ export async function POST(request: Request) {
         status: body.status,
         latitude: body.latitude,
         longitude: body.longitude,
+        h3_cell: h3Cell,
         ip_address: ipAddress,
         recorded_at: new Date().toISOString(),
       } as never);

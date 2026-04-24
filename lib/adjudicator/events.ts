@@ -5,6 +5,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { haversineDistance } from '@/lib/utils/geo';
 import { CLAIM_RULES } from '@/lib/config/constants';
+import { toCell, disk, defaultRingSize } from '@/lib/utils/h3';
 import type { TriggerCandidate } from './types';
 
 /**
@@ -46,6 +47,11 @@ export async function isDuplicateEvent(candidate: TriggerCandidate): Promise<boo
 export async function insertDisruptionEvent(candidate: TriggerCandidate): Promise<string | null> {
   const supabase = createAdminClient();
 
+  // Compute the H3 zone footprint for this disruption.
+  const centerCell = toCell(candidate.latitude, candidate.longitude);
+  const ringSize = candidate.h3_ring_size ?? defaultRingSize(candidate.event_type);
+  const affectedCells = disk(centerCell, ringSize);
+
   const { data, error } = await supabase
     .from('live_disruption_events')
     .insert({
@@ -55,6 +61,9 @@ export async function insertDisruptionEvent(candidate: TriggerCandidate): Promis
       zone_latitude: candidate.latitude,
       zone_longitude: candidate.longitude,
       geofence_radius_km: candidate.geofence_radius_km,
+      center_h3_cell: centerCell,
+      h3_ring_size: ringSize,
+      affected_h3_cells: affectedCells,
       trigger_value: candidate.trigger_value,
       trigger_threshold: candidate.trigger_threshold,
       verified_by_api: candidate.verified_by_api,

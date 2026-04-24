@@ -7,6 +7,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isWithinCircle } from '@/lib/utils/geo';
+import { toCell, isInDisk } from '@/lib/utils/h3';
 import { CLAIM_RULES, FRAUD } from '@/lib/config/constants';
 import { runAllFraudChecks, updateTrustScore } from '@/lib/fraud/detector';
 import { simulatePayout } from '@/lib/payments/simulate-payout';
@@ -82,6 +83,7 @@ export async function verifyGate2(claimId: string): Promise<Gate2Result> {
     status: string;
     latitude: number | null;
     longitude: number | null;
+    h3_cell: string | null;
     recorded_at: string;
   }>;
 
@@ -90,9 +92,26 @@ export async function verifyGate2(claimId: string): Promise<Gate2Result> {
   const activeEntries = logs.filter((l) => l.status !== 'offline');
   const activityMinutes = activeEntries.length * 5;
 
-  // Check GPS within disruption zone
+  // Check GPS within disruption zone.
+  //
+  // Primary check: H3 cell membership — is any active heartbeat's h3_cell
+  // inside the event's disk? This is O(1) per heartbeat (gridDistance check)
+  // and resolves zones at ~0.9 km granularity instead of city-wide circles.
+  //
+  // Fallback 1: old haversine against event.zone_latitude/longitude (for
+  // legacy events that pre-date the H3 migration).
+  //
+  // Fallback 2: driver's registered profile zone (should almost never hit).
+  const eventCenter = event?.center_h3_cell ?? null;
+  const eventRing = event?.h3_ring_size ?? null;
+
   let gpsWithinZone = false;
-  if (event && event.zone_latitude != null && event.zone_longitude != null) {
+  if (eventCenter != null && eventRing != null) {
+    gpsWithinZone = activeEntries.some((l) => {
+      const cell = l.h3_cell ?? (l.latitude != null && l.longitude != null ? toCell(l.latitude, l.longitude) : null);
+      return cell != null && isInDisk(cell, eventCenter, eventRing);
+    });
+  } else if (event?.zone_latitude != null && event?.zone_longitude != null) {
     gpsWithinZone = activeEntries.some(
       (l) =>
         l.latitude != null &&
@@ -106,7 +125,6 @@ export async function verifyGate2(claimId: string): Promise<Gate2Result> {
         )
     );
   } else if (profile.zone_latitude != null && profile.zone_longitude != null) {
-    // Fallback: check against driver's registered zone
     gpsWithinZone = activeEntries.some(
       (l) =>
         l.latitude != null &&

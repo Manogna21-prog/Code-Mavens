@@ -70,6 +70,11 @@ export const demoTriggerSchema = z.object({
   event_type: z.enum(DISRUPTION_TYPES),
   severity: z.number().min(0).max(10),
   trigger_value: z.number().positive().optional(),
+  // Zone-level overrides (pin-drop from the admin map). When present, override
+  // the city centroid; the disruption fires at this exact point.
+  zone_latitude: z.number().min(-90).max(90).optional(),
+  zone_longitude: z.number().min(-180).max(180).optional(),
+  h3_ring_size: z.number().int().min(0).max(30).optional(),
 });
 
 export const reviewClaimSchema = z.object({

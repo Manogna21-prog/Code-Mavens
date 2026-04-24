@@ -13,6 +13,8 @@ export interface TriggerCandidate {
   trigger_value: number;
   trigger_threshold: number;
   geofence_radius_km: number;
+  /** Optional override for H3 ring size; defaults to per-event-type value. */
+  h3_ring_size?: number;
   data_sources: string[];
   raw_api_data: Record<string, unknown>;
   verified_by_api: boolean;

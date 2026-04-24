@@ -4,6 +4,7 @@
 
 import { createAdminClient } from '@/lib/supabase/admin';
 import { isWithinCircle } from '@/lib/utils/geo';
+import { toCell, disk, defaultRingSize, isInDisk } from '@/lib/utils/h3';
 import { CLAIM_RULES } from '@/lib/config/constants';
 import { runAllFraudChecks, updateTrustScore } from '@/lib/fraud/detector';
 import { simulatePayout } from '@/lib/payments/simulate-payout';
@@ -55,19 +56,77 @@ export async function processClaimsForEvent(
   let claimsCreated = 0;
   let payoutsInitiated = 0;
 
+  // Pre-compute the H3 footprint of this disruption once per event.
+  const eventCenterCell = toCell(candidate.latitude, candidate.longitude);
+  const eventRingSize = candidate.h3_ring_size ?? defaultRingSize(candidate.event_type);
+  // (We don't need the full disk expanded here — isInDisk uses gridDistance.)
+  void disk; // keep import used for future callers
+
+  // Fetch the latest heartbeat per driver in one round-trip. Drivers who
+  // haven't emitted activity in the last 30 min fall back to their
+  // registered zone (so a freshly-online driver isn't unfairly excluded).
+  const sinceIso = new Date(Date.now() - 30 * 60 * 1000).toISOString();
+  const profileIds = policies.map((p) => p.profile_id);
+  const { data: recentLogsRaw } = profileIds.length
+    ? await supabase
+        .from('driver_activity_logs')
+        .select('profile_id, latitude, longitude, h3_cell, recorded_at, status')
+        .in('profile_id', profileIds)
+        .gte('recorded_at', sinceIso)
+        .order('recorded_at', { ascending: false })
+    : { data: [] };
+
+  const latestCellByProfile = new Map<string, string>();
+  for (const row of (recentLogsRaw ?? []) as Array<{
+    profile_id: string;
+    latitude: number | null;
+    longitude: number | null;
+    h3_cell: string | null;
+    status: string;
+  }>) {
+    if (latestCellByProfile.has(row.profile_id)) continue; // keep first (most recent)
+    if (row.status === 'offline') continue;
+    const cell = row.h3_cell ?? (row.latitude != null && row.longitude != null ? toCell(row.latitude, row.longitude) : null);
+    if (cell) latestCellByProfile.set(row.profile_id, cell);
+  }
+
   for (const policy of policies) {
     const profile = policy.profiles;
     const plan = policy.plan_packages;
     if (!profile || !plan) continue;
 
-    // Filter by city
+    // City gate stays as a cheap pre-filter — no point scoring drivers from
+    // other cities even if their home zone happens to be near the pin.
     if (profile.city !== candidate.city) continue;
 
-    // Check geofence
-    if (candidate.geofence_radius_km > 0 && profile.zone_latitude && profile.zone_longitude) {
-      if (!isWithinCircle(profile.zone_latitude, profile.zone_longitude, candidate.latitude, candidate.longitude, candidate.geofence_radius_km)) {
+    // Zone gate: is the driver's LIVE position (or registered fallback)
+    // inside the event's H3 disk?
+    const liveCell = latestCellByProfile.get(policy.profile_id);
+    const fallbackCell =
+      profile.zone_latitude != null && profile.zone_longitude != null
+        ? toCell(profile.zone_latitude, profile.zone_longitude)
+        : null;
+    const effectiveCell = liveCell ?? fallbackCell;
+
+    if (!effectiveCell) continue;
+    if (!isInDisk(effectiveCell, eventCenterCell, eventRingSize)) {
+      // Legacy fallback: if the radius is positive and we somehow still
+      // don't match on H3, try the old circle once before skipping.
+      if (
+        candidate.geofence_radius_km > 0 &&
+        profile.zone_latitude &&
+        profile.zone_longitude &&
+        !isWithinCircle(
+          profile.zone_latitude,
+          profile.zone_longitude,
+          candidate.latitude,
+          candidate.longitude,
+          candidate.geofence_radius_km
+        )
+      ) {
         continue;
       }
+      if (candidate.geofence_radius_km > 0) continue;
     }
 
     // Check daily claim limit

@@ -79,6 +79,10 @@ export interface LiveDisruptionEvent {
   zone_latitude: number | null;
   zone_longitude: number | null;
   geofence_radius_km: number;
+  // Zone (H3) footprint — present on events inserted after migration 014.
+  center_h3_cell: string | null;
+  h3_ring_size: number | null;
+  affected_h3_cells: string[] | null;
   trigger_value: number | null;
   trigger_threshold: number | null;
   verified_by_api: boolean;

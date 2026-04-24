@@ -6,6 +6,7 @@ import { getCityBySlug } from '@/lib/config/cities';
 import { TRIGGERS } from '@/lib/config/constants';
 import { setMockPlatformStatus } from '@/lib/clients/statusgator';
 import { processClaimsForEvent } from '@/lib/adjudicator/claims';
+import { toCell, disk, defaultRingSize } from '@/lib/utils/h3';
 import type { DisruptionType } from '@/lib/config/constants';
 import type { TriggerCandidate } from '@/lib/adjudicator/types';
 
@@ -24,7 +25,8 @@ export async function POST(request: Request) {
     const admin = createAdminClient();
 
     const body = await request.json();
-    const { city, event_type, severity, trigger_value } = demoTriggerSchema.parse(body);
+    const { city, event_type, severity, trigger_value, zone_latitude, zone_longitude, h3_ring_size } =
+      demoTriggerSchema.parse(body);
 
     const cityData = getCityBySlug(city);
     if (!cityData) {
@@ -33,6 +35,14 @@ export async function POST(request: Request) {
 
     const triggerConfig = TRIGGERS[event_type as DisruptionType];
     const actualTriggerValue = trigger_value ?? triggerConfig.threshold * 1.5;
+
+    // If the admin dropped a pin, fire at that exact location; otherwise fall
+    // back to the city centroid so existing one-click demos keep working.
+    const originLat = zone_latitude ?? cityData.latitude;
+    const originLng = zone_longitude ?? cityData.longitude;
+    const ringSize = h3_ring_size ?? defaultRingSize(event_type as DisruptionType);
+    const centerCell = toCell(originLat, originLng);
+    const affectedCells = disk(centerCell, ringSize);
 
     if (event_type === 'platform_outage') {
       setMockPlatformStatus('down', actualTriggerValue);
@@ -45,9 +55,12 @@ export async function POST(request: Request) {
         event_type,
         severity_score: severity,
         city,
-        zone_latitude: cityData.latitude,
-        zone_longitude: cityData.longitude,
+        zone_latitude: originLat,
+        zone_longitude: originLng,
         geofence_radius_km: triggerConfig.geofence_radius_km,
+        center_h3_cell: centerCell,
+        h3_ring_size: ringSize,
+        affected_h3_cells: affectedCells,
         trigger_value: actualTriggerValue,
         trigger_threshold: triggerConfig.threshold,
         verified_by_api: true,
@@ -67,16 +80,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Failed to create event' }, { status: 500 });
     }
 
-    // Also process claims for affected policies (like the adjudicator would)
+    // Also process claims for affected policies (like the adjudicator would).
+    // Note: latitude/longitude carry the pin-drop location so downstream
+    // haversine fallbacks behave consistently with the H3 disk.
     const candidate: TriggerCandidate = {
       event_type: event_type as DisruptionType,
       city,
-      latitude: cityData.latitude,
-      longitude: cityData.longitude,
+      latitude: originLat,
+      longitude: originLng,
       severity_score: severity,
       trigger_value: actualTriggerValue,
       trigger_threshold: triggerConfig.threshold,
       geofence_radius_km: triggerConfig.geofence_radius_km,
+      h3_ring_size: ringSize,
       data_sources: ['demo-panel'],
       raw_api_data: { demo: true },
       verified_by_api: true,
