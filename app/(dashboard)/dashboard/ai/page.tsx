@@ -314,7 +314,7 @@ export default function AIAssistantPage() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           margin: '0 auto 16px',
         }}>
-          <Sparkles size={28} color="#F07820" strokeWidth={2} />
+          <img src="/logo.png" alt="SafeShift" width={64} height={64} style={{ borderRadius: 6 }} />
         </div>
         <h1 style={{ fontSize: 24, fontWeight: 800, color: '#1A1A1A', letterSpacing: '-0.03em', margin: '0 0 8px', fontFamily: F }}>
           {t('ai.title')}
@@ -408,6 +408,7 @@ export default function AIAssistantPage() {
               style={{
                 alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start',
                 maxWidth: '85%',
+                minWidth: 0,
                 padding: '12px 16px',
                 borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px',
                 background: m.role === 'user' ? '#F07820' : '#ffffff',
@@ -417,11 +418,13 @@ export default function AIAssistantPage() {
                 fontFamily: F,
                 border: m.role === 'ai' ? '1px solid #E5E7EB' : 'none',
                 boxShadow: m.role === 'ai' ? '0 2px 8px rgba(0,0,0,0.04)' : 'none',
+                overflowWrap: 'anywhere',
+                wordBreak: 'break-word',
               }}
             >
               {m.role === 'ai' && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                  <Sparkles size={12} color="#F07820" strokeWidth={2.5} />
+                  <img src="/logo.png" alt="SafeShift" width={20} height={20} style={{ borderRadius: 2 }} />
                   <span style={{ fontSize: 11, fontWeight: 700, color: '#F07820', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {t('ai.title')}
                   </span>

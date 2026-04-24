@@ -41,6 +41,31 @@ interface DashboardFast {
   } | null;
 }
 
+interface PayoutRow {
+  id: string;
+  claim_id: string;
+  amount_inr: number;
+  status: string;
+  mock_upi_ref: string | null;
+  created_at: string;
+}
+
+interface PolicyRow {
+  id: string;
+  final_premium_inr: number;
+  payment_status: string;
+  created_at: string;
+}
+
+interface LedgerEntry {
+  type: 'premium' | 'payout';
+  id: string;
+  date: string;
+  amount: number;
+  status: string;
+  ref: string;
+}
+
 // ---------------------------------------------------------------------------
 // Disruption icons (inline SVG paths, no emoji)
 // ---------------------------------------------------------------------------
@@ -196,11 +221,9 @@ function PendingDotIcon() {
 export default function ClaimsPage() {
   const [activeTab, setActiveTab] = useState<'claims' | 'analytics'>('claims');
   const [claims, setClaims] = useState<ClaimRow[]>([]);
+  const [payouts, setPayouts] = useState<PayoutRow[]>([]);
+  const [ledger, setLedger] = useState<LedgerEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [autoRenew, setAutoRenew] = useState(false);
-  const [upiVerified, setUpiVerified] = useState(false);
-  const [nextRenewal, setNextRenewal] = useState<string | null>(null);
-  const [profileId, setProfileId] = useState<string | null>(null);
   const [userLang, setUserLang] = useState('en');
 
   const fetchClaims = useCallback(async (userId: string) => {
@@ -230,25 +253,36 @@ export default function ClaimsPage() {
         const supabase = createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
-        setProfileId(user.id);
 
-        // Fetch profile for auto-renew / UPI
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('auto_renew_enabled, upi_verified')
-          .eq('id', user.id)
-          .single();
+        // Fetch claims, payouts, and policies in parallel
+        const [, payoutsRes, policiesRes] = await Promise.all([
+          fetchClaims(user.id),
+          supabase
+            .from('payout_ledger')
+            .select('id, claim_id, amount_inr, status, mock_upi_ref, created_at')
+            .eq('profile_id', user.id)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('weekly_policies')
+            .select('id, final_premium_inr, payment_status, created_at')
+            .eq('profile_id', user.id)
+            .order('created_at', { ascending: false }),
+        ]);
 
-        if (profile) {
-          setAutoRenew(!!(profile as Record<string, unknown>).auto_renew_enabled);
-          setUpiVerified(!!(profile as Record<string, unknown>).upi_verified);
+        const pRows = (payoutsRes.data as unknown as PayoutRow[]) || [];
+        const polRows = (policiesRes.data as unknown as PolicyRow[]) || [];
+        setPayouts(pRows);
+
+        // Build unified ledger
+        const entries: LedgerEntry[] = [];
+        for (const p of polRows) {
+          entries.push({ id: p.id, date: p.created_at, type: 'premium', amount: Number(p.final_premium_inr), ref: p.id.slice(0, 8), status: p.payment_status });
         }
-
-        if (dash.policy?.week_end) {
-          setNextRenewal(dash.policy.week_end);
+        for (const p of pRows) {
+          entries.push({ id: p.id, date: p.created_at, type: 'payout', amount: Number(p.amount_inr), ref: p.mock_upi_ref || p.id.slice(0, 8), status: p.status });
         }
-
-        await fetchClaims(user.id);
+        entries.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setLedger(entries);
       } finally {
         setLoading(false);
       }
@@ -266,18 +300,6 @@ export default function ClaimsPage() {
         });
     });
   }, []);
-
-  // Toggle auto-renew
-  async function toggleAutoRenew() {
-    if (!profileId) return;
-    const next = !autoRenew;
-    setAutoRenew(next);
-    const supabase = createClient();
-    await supabase
-      .from('profiles')
-      .update({ auto_renew_enabled: next } as never)
-      .eq('id', profileId);
-  }
 
   const t = getTranslator(userLang);
 
@@ -419,13 +441,6 @@ export default function ClaimsPage() {
           </p>
         </div>
 
-        <AutoRenewCard
-          autoRenew={autoRenew}
-          upiVerified={upiVerified}
-          nextRenewal={nextRenewal}
-          onToggle={toggleAutoRenew}
-          t={t}
-        />
       </div>
     );
   }
@@ -459,157 +474,165 @@ export default function ClaimsPage() {
           value={`\u20B9${totalReceived.toLocaleString('en-IN')}`}
           accent="#F07820"
         />
-        <StatCard
-          label={t('claims.successRate')}
-          value={`${successRate}%`}
-          accent={successRate >= 80 ? '#F07820' : successRate >= 50 ? '#D96A10' : 'var(--red-acc)'}
-        />
       </div>
 
-      {/* ---------------------------------------------------------------- */}
-      {/* Section 2: Latest / Active Claim (featured card)                 */}
-      {/* ---------------------------------------------------------------- */}
-      {latestClaim && <FeaturedClaimCard claim={latestClaim} t={t} />}
 
       {/* ---------------------------------------------------------------- */}
-      {/* Section 3: Claims Timeline                                       */}
+      {/* Section 3: Payout Timeline — grouped by month                    */}
       {/* ---------------------------------------------------------------- */}
-      {claims.length > 1 && (
-        <div style={{ marginTop: 28, marginBottom: 28 }}>
-          <p
-            className="mono"
-            style={{
-              fontSize: 10,
-              color: 'var(--ink-60)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.1em',
-              marginBottom: 16,
-            }}
-          >
-            {t('claims.timeline')}
-          </p>
+      {claims.length > 0 && (() => {
+        // Group claims by month
+        const grouped: Record<string, ClaimRow[]> = {};
+        for (const c of claims) {
+          const d = new Date(c.created_at);
+          const key = d.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(c);
+        }
+        const months = Object.keys(grouped);
 
-          <div style={{ position: 'relative' }}>
-            {/* Vertical line */}
-            <div
-              style={{
-                position: 'absolute',
-                left: 5,
-                top: 6,
-                bottom: 6,
-                width: 2,
-                background: 'var(--ink-10)',
-                borderRadius: 1,
-              }}
-            />
+        return (
+          <div style={{ marginTop: 28, marginBottom: 28 }}>
+            <p className="mono" style={{
+              fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase',
+              letterSpacing: '0.1em', marginBottom: 16,
+            }}>
+              Payout Timeline
+            </p>
 
-            {claims.slice(1).map((claim, idx) => {
-              const bucket = bucketStatus(claim.status);
-              const dotColor = TIMELINE_DOT_COLOR[bucket];
-              const eventType = claim.live_disruption_events?.event_type as DisruptionType | undefined;
-              const triggerCfg = eventType ? TRIGGERS[eventType] : undefined;
-              const triggerLabel = triggerCfg?.label || 'Unknown Event';
-              const city = claim.live_disruption_events?.city || '--';
-              const triggerVal = claim.live_disruption_events?.trigger_value;
-              const triggerThresh = claim.live_disruption_events?.trigger_threshold ?? triggerCfg?.threshold;
-              const unit = triggerCfg?.unit || '';
+            <div style={{ position: 'relative' }}>
+              {/* Vertical line */}
+              <div style={{
+                position: 'absolute', left: 5, top: 6, bottom: 6,
+                width: 2, background: 'var(--ink-10)', borderRadius: 1,
+              }} />
 
-              return (
-                <div
-                  key={claim.id}
-                  style={{
-                    display: 'flex',
-                    gap: 16,
-                    paddingBottom: idx < claims.length - 2 ? 20 : 0,
-                    position: 'relative',
-                  }}
-                >
-                  {/* Timeline dot */}
-                  <div
-                    style={{
-                      width: 12,
-                      height: 12,
-                      borderRadius: '50%',
-                      background: dotColor,
-                      flexShrink: 0,
-                      marginTop: 4,
-                      position: 'relative',
-                      zIndex: 1,
-                      boxShadow: `0 0 0 3px var(--cream)`,
-                    }}
-                  />
+              {months.map((month) => (
+                <div key={month} style={{ marginBottom: 20 }}>
+                  {/* Month header */}
+                  <p className="mono" style={{
+                    fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase',
+                    letterSpacing: '0.1em', marginBottom: 10, paddingBottom: 6,
+                    borderBottom: '1px solid var(--ink-10)', marginLeft: 0,
+                  }}>
+                    {month} ({grouped[month].length})
+                  </p>
 
-                  {/* Card */}
-                  <div
-                    style={{
-                      flex: 1,
-                      border: '1px solid var(--rule)',
-                      borderRadius: 10,
-                      padding: '12px 14px',
-                    }}
-                  >
-                    {/* Top row: event + status */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: dotColor, display: 'flex' }}>
-                          {getDisruptionIcon(eventType || '')}
-                        </span>
-                        <div>
-                          <p className="sans" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
-                            {triggerLabel}
-                          </p>
-                          <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
-                            {city} &middot; {formatDate(claim.created_at)}
-                          </p>
+                  <div style={{ maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
+                  {grouped[month].map((claim, idx) => {
+                    const bucket = bucketStatus(claim.status);
+                    const dotColor = TIMELINE_DOT_COLOR[bucket];
+                    const eventType = claim.live_disruption_events?.event_type as DisruptionType | undefined;
+                    const triggerCfg = eventType ? TRIGGERS[eventType] : undefined;
+                    const triggerLabel = triggerCfg?.label || 'Unknown Event';
+                    const city = claim.live_disruption_events?.city || '--';
+                    const triggerVal = claim.live_disruption_events?.trigger_value;
+                    const triggerThresh = claim.live_disruption_events?.trigger_threshold ?? triggerCfg?.threshold;
+                    const unit = triggerCfg?.unit || '';
+
+                    return (
+                      <div key={claim.id} style={{
+                        display: 'flex', gap: 16,
+                        paddingBottom: idx < grouped[month].length - 1 ? 16 : 20,
+                        position: 'relative',
+                      }}>
+                        {/* Timeline dot */}
+                        <div style={{
+                          width: 12, height: 12, borderRadius: '50%',
+                          background: dotColor, flexShrink: 0, marginTop: 4,
+                          position: 'relative', zIndex: 1,
+                          boxShadow: '0 0 0 3px var(--cream)',
+                        }} />
+
+                        {/* Card */}
+                        <div style={{
+                          flex: 1, border: '1px solid var(--rule)',
+                          borderRadius: 10, padding: '12px 14px',
+                        }}>
+                          {/* Top row: event + status */}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ color: dotColor, display: 'flex' }}>
+                                {getDisruptionIcon(eventType || '')}
+                              </span>
+                              <div>
+                                <p className="sans" style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink)' }}>
+                                  {triggerLabel}
+                                </p>
+                                <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>
+                                  {city} · {formatDate(claim.created_at)}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="mono" style={{
+                              fontSize: 9, fontWeight: 600, padding: '2px 8px',
+                              borderRadius: 100, whiteSpace: 'nowrap',
+                              ...STATUS_BADGE_STYLES[bucket],
+                            }}>
+                              {statusLabel(claim.status, t)}
+                            </span>
+                          </div>
+
+                          {/* Trigger detail */}
+                          {triggerVal != null && triggerThresh != null && (
+                            <p className="sans" style={{
+                              fontSize: 12, color: 'var(--ink-60)', marginTop: 8,
+                              padding: '6px 8px', background: 'rgba(240,120,32,0.04)', borderRadius: 6,
+                            }}>
+                              {triggerLabel} — {triggerVal}{unit} detected (threshold: {triggerThresh}{unit})
+                            </p>
+                          )}
+
+                          {/* Payout amount + gate indicators */}
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span className="serif" style={{
+                                fontSize: 18, fontWeight: 800, letterSpacing: '-0.03em',
+                                color: bucket === 'paid' ? '#F07820' : bucket === 'rejected' ? 'var(--red-acc)' : 'var(--ink)',
+                              }}>
+                                ₹{Number(claim.payout_amount_inr).toLocaleString('en-IN')}
+                              </span>
+                              {/* Gate status dots */}
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                <span style={{
+                                  width: 7, height: 7, borderRadius: '50%',
+                                  background: claim.gate1_passed ? '#F07820' : 'var(--ink-10)',
+                                }} title="Gate 1" />
+                                <span style={{
+                                  width: 7, height: 7, borderRadius: '50%',
+                                  background: claim.gate2_passed ? '#F07820' : 'var(--ink-10)',
+                                }} title="Gate 2" />
+                              </div>
+                            </div>
+                            {/* UPI ref */}
+                            {(() => {
+                              const p = payouts.find((px) => px.claim_id === claim.id);
+                              return p?.mock_upi_ref ? (
+                                <span className="mono" style={{ fontSize: 9, color: 'var(--ink-30)' }}>
+                                  UPI: {p.mock_upi_ref}
+                                </span>
+                              ) : null;
+                            })()}
+                          </div>
                         </div>
                       </div>
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: 9,
-                          fontWeight: 600,
-                          padding: '2px 8px',
-                          borderRadius: 100,
-                          whiteSpace: 'nowrap',
-                          ...STATUS_BADGE_STYLES[bucket],
-                        }}
-                      >
-                        {statusLabel(claim.status, t)}
-                      </span>
-                    </div>
-
-                    {/* Payout + trigger value */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginTop: 10 }}>
-                      <span
-                        className="serif"
-                        style={{ fontSize: 18, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-0.03em' }}
-                      >
-                        {'\u20B9'}{Number(claim.payout_amount_inr).toLocaleString('en-IN')}
-                      </span>
-                      {triggerVal != null && triggerThresh != null && (
-                        <span className="mono" style={{ fontSize: 10, color: 'var(--ink-60)' }}>
-                          {triggerVal}{unit} detected, threshold: {triggerThresh}{unit}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                    );
+                  })}
+                  </div>{/* end scrollable */}
                 </div>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
+        );
+      })()}
+
+      {/* ---------------------------------------------------------------- */}
+      {/* Section 4: Payment Ledger                                        */}
+      {/* ---------------------------------------------------------------- */}
+      {ledger.length > 0 && (
+        <PaymentLedger entries={ledger} />
       )}
 
-      {/* ---------------------------------------------------------------- */}
-      {/* Section 4: Auto-Renew Status                                     */}
-      {/* ---------------------------------------------------------------- */}
-      <AutoRenewCard
-        autoRenew={autoRenew}
-        upiVerified={upiVerified}
-        nextRenewal={nextRenewal}
-        onToggle={toggleAutoRenew}
-        t={t}
-      />
     </div>
   );
 }
@@ -809,119 +832,104 @@ function FeaturedClaimCard({ claim, t }: { claim: ClaimRow; t: (key: string) => 
   );
 }
 
-// ---------- Auto-Renew card (Section 4) ----------
+// ---------- Payment Ledger ----------
 
-function AutoRenewCard({
-  autoRenew,
-  upiVerified,
-  nextRenewal,
-  onToggle,
-  t,
-}: {
-  autoRenew: boolean;
-  upiVerified: boolean;
-  nextRenewal: string | null;
-  onToggle: () => void;
-  t: (key: string) => string;
-}) {
+function PaymentLedger({ entries }: { entries: LedgerEntry[] }) {
+  const [filter, setFilter] = useState<'all' | 'premium' | 'payout'>('all');
+  const [expanded, setExpanded] = useState(false);
+
+  const filtered = entries.filter((e) => filter === 'all' || e.type === filter);
+  const visible = expanded ? filtered : filtered.slice(0, 5);
+  const premiumCount = entries.filter((e) => e.type === 'premium').length;
+  const payoutCount = entries.filter((e) => e.type === 'payout').length;
+
   return (
-    <div
-      style={{
-        border: '1px solid var(--rule)',
-        borderRadius: 12,
-        padding: '16px',
-        marginTop: 24,
-      }}
-    >
-      <p
-        className="mono"
-        style={{
-          fontSize: 10,
-          color: 'var(--ink-60)',
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          marginBottom: 14,
-        }}
-      >
-        {t('claims.autoRenew')}
-      </p>
-
-      {/* Toggle row */}
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: 12,
-        }}
-      >
-        <span className="sans" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)' }}>
-          {t('claims.weeklyAutoRenewal')}
-        </span>
-        <button
-          onClick={onToggle}
-          type="button"
-          style={{
-            width: 44,
-            height: 24,
-            borderRadius: 12,
-            border: 'none',
-            cursor: 'pointer',
-            background: autoRenew ? '#F07820' : 'var(--ink-10)',
-            position: 'relative',
-            transition: 'background 0.2s',
-          }}
-        >
-          <span
-            style={{
-              position: 'absolute',
-              top: 2,
-              left: autoRenew ? 22 : 2,
-              width: 20,
-              height: 20,
-              borderRadius: '50%',
-              background: '#fff',
-              transition: 'left 0.2s',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
-            }}
-          />
-        </button>
-      </div>
-
-      {/* UPI mandate status */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-        <span
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: upiVerified ? '#F07820' : 'var(--ink-30)',
-            display: 'inline-block',
-          }}
-        />
-        <span className="sans" style={{ fontSize: 12, color: 'var(--ink-60)' }}>
-          {upiVerified ? t('claims.upiActive') : t('claims.upiNotSet')}
-        </span>
-      </div>
-
-      {/* Next renewal */}
-      {nextRenewal && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span
-            style={{
-              width: 8,
-              height: 8,
-              borderRadius: '50%',
-              background: 'var(--ink-10)',
-              display: 'inline-block',
-            }}
-          />
-          <span className="sans" style={{ fontSize: 12, color: 'var(--ink-60)' }}>
-            {t('claims.nextRenewal')}{' '}
-            {new Date(nextRenewal).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-          </span>
+    <div style={{ border: '1px solid var(--rule)', borderRadius: 12, padding: '18px 16px 14px', marginTop: 16, marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', margin: 0 }}>
+          Payment Ledger
+        </p>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--ink-10)', borderRadius: 8, padding: 2 }}>
+          {([
+            { key: 'all' as const, label: `All (${entries.length})` },
+            { key: 'payout' as const, label: `Payouts (${payoutCount})` },
+            { key: 'premium' as const, label: `Premiums (${premiumCount})` },
+          ]).map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => { setFilter(tab.key); setExpanded(false); }}
+              className="mono"
+              style={{
+                fontSize: 9, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                border: 'none', cursor: 'pointer', letterSpacing: '0.04em',
+                background: filter === tab.key ? '#F07820' : 'transparent',
+                color: filter === tab.key ? '#fff' : 'var(--ink-60)',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
         </div>
+      </div>
+
+      {filtered.length === 0 ? (
+        <p className="sans" style={{ fontSize: 13, color: 'var(--ink-60)', textAlign: 'center', padding: '24px 0' }}>No transactions</p>
+      ) : (
+        <>
+          {visible.map((entry) => {
+            const isPremium = entry.type === 'premium';
+            const amtColor = isPremium ? 'var(--red-acc)' : '#F07820';
+            const sign = isPremium ? '-' : '+';
+            return (
+              <div key={`${entry.type}-${entry.id}`} style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 0', borderBottom: '1px solid var(--ink-10)',
+              }}>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className="mono" style={{
+                      fontSize: 9, fontWeight: 700, padding: '1px 6px', borderRadius: 3,
+                      background: isPremium ? 'rgba(239,68,68,0.1)' : 'rgba(240,120,32,0.1)',
+                      color: amtColor, textTransform: 'uppercase', letterSpacing: '0.06em',
+                    }}>
+                      {isPremium ? 'PREMIUM' : 'PAYOUT'}
+                    </span>
+                    <span className="mono" style={{ fontSize: 10, color: 'var(--ink-30)' }}>{entry.ref}</span>
+                  </div>
+                  <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)', marginTop: 3 }}>
+                    {formatDate(entry.date)}
+                  </p>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <p className="serif" style={{ fontSize: 15, fontWeight: 900, color: amtColor }}>
+                    {sign}₹{Number(entry.amount).toLocaleString('en-IN')}
+                  </p>
+                  <p className="mono" style={{
+                    fontSize: 9, textTransform: 'uppercase', letterSpacing: '0.06em',
+                    color: ['completed', 'paid', 'demo'].includes(entry.status) ? '#F07820' : entry.status === 'failed' ? 'var(--red-acc)' : 'var(--ink-60)',
+                  }}>
+                    {entry.status}
+                  </p>
+                </div>
+              </div>
+            );
+          })}
+          {filtered.length > 5 && (
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="mono"
+              style={{
+                width: '100%', padding: '10px 0', marginTop: 4,
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 11, fontWeight: 600, color: '#F07820', letterSpacing: '0.04em',
+              }}
+            >
+              {expanded ? 'Show less ▲' : `Show all ${filtered.length} transactions ▼`}
+            </button>
+          )}
+        </>
       )}
     </div>
   );
 }
+

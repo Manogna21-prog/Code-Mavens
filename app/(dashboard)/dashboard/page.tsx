@@ -247,6 +247,7 @@ export default function DashboardHomePage() {
   const [showNotifs, setShowNotifs] = useState(false);
   const [notifs, setNotifs] = useState<{ type: string; message: string; timestamp: string; pinned: boolean }[]>([]);
   const [notifsLoaded, setNotifsLoaded] = useState(false);
+  const [windowError, setWindowError] = useState(false);
 
   useEffect(() => {
     // Fetch user language from profile
@@ -681,19 +682,37 @@ export default function DashboardHomePage() {
           </div>
 
         ) : data.last_tier ? (
-          /* ── STATE D: Not Sunday, has expired policy — show next window date ── */
+          /* ── STATE D: Not Sunday, has expired policy ── */
           <div className="dsh-s dsh-card" style={{ animationDelay: '0.1s', textAlign: 'center', padding: '28px 20px' }}>
             <p style={{ fontSize: 14, fontWeight: 600, color: '#EF4444', marginBottom: 4, fontFamily: F }}>
               Policy Inactive
             </p>
-            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 8, fontFamily: F }}>
-              You can reinstate your policy on the next payment window.
+            <p style={{ fontSize: 13, color: '#6B7280', marginBottom: 16, fontFamily: F }}>
+              Your {data.last_tier} plan has expired. Reinstate to stay covered.
             </p>
-            {data.next_renewal_date && (
-              <p style={{ fontSize: 14, fontWeight: 600, color: '#1A40C0', fontFamily: F }}>
-                Next window: Sunday, {new Date(data.next_renewal_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-              </p>
+            {windowError && (
+              <div style={{
+                background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
+                padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#DC2626', fontFamily: F,
+              }}>
+                Payment window is only open on Sundays (6 AM – 11:59 PM IST).
+                {data.next_renewal_date && (
+                  <span style={{ display: 'block', marginTop: 4, fontWeight: 600 }}>
+                    Next window: Sunday, {new Date(data.next_renewal_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                  </span>
+                )}
+              </div>
             )}
+            <button
+              onClick={() => setWindowError(true)}
+              style={{
+                display: 'inline-block', background: '#F07820', color: '#fff',
+                borderRadius: 8, padding: '10px 24px', fontSize: 14, fontWeight: 700,
+                border: 'none', cursor: 'pointer', fontFamily: F,
+              }}
+            >
+              Reinstate Policy
+            </button>
           </div>
 
         ) : (

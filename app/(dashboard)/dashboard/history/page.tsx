@@ -391,7 +391,6 @@ export default function HistoryPage() {
   const [coinsLedger, setCoinsLedger] = useState<CoinEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [activeTab, setActiveTab] = useState<'analytics' | 'transactions'>('analytics');
   const [userLang, setUserLang] = useState('en');
 
   // Fetch all data
@@ -682,49 +681,9 @@ export default function HistoryPage() {
         </p>
       </div>
 
-      {/* ------------------------------------------------------------------ */}
-      {/* Tab Switcher                                                       */}
-      {/* ------------------------------------------------------------------ */}
-      <div style={{ padding: '16px 16px 0' }}>
-        <div
-          style={{
-            display: 'flex',
-            background: 'var(--ink-10)',
-            borderRadius: 10,
-            padding: 3,
-          }}
-        >
-          {(['analytics', 'transactions'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                flex: 1,
-                padding: '9px 0',
-                fontSize: 12,
-                fontWeight: 700,
-                letterSpacing: '0.06em',
-                textTransform: 'uppercase',
-                background: activeTab === tab ? '#F07820' : 'transparent',
-                border: 'none',
-                borderRadius: 8,
-                color: activeTab === tab ? '#fff' : 'var(--ink-60)',
-                cursor: 'pointer',
-                fontFamily: 'var(--font-mono, monospace)',
-                boxShadow: 'none',
-                transition: 'all 0.2s ease',
-              }}
-            >
-              {tab}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* ================================================================== */}
-      {/* ANALYTICS TAB                                                      */}
+      {/* ANALYTICS                                                          */}
       {/* ================================================================== */}
-      {activeTab === 'analytics' && (
         <div style={{ padding: '0 16px' }}>
 
           {/* ---------------------------------------------------------------- */}
@@ -976,161 +935,7 @@ export default function HistoryPage() {
             )}
           </div>
         </div>
-      )}
 
-      {/* ================================================================== */}
-      {/* TRANSACTIONS TAB                                                   */}
-      {/* ================================================================== */}
-      {activeTab === 'transactions' && (
-        <div style={{ padding: '0 16px' }}>
-
-          {/* ---------------------------------------------------------------- */}
-          {/* Section 4: Payout Timeline (visual)                             */}
-          {/* ---------------------------------------------------------------- */}
-          <div style={{ ...CARD, marginTop: 16, padding: '18px 16px 14px' }}>
-            <p className="mono" style={{ fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 16 }}>
-              Payout Timeline
-            </p>
-
-            {claims.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <p className="sans" style={{ fontSize: 14, color: 'var(--ink-60)' }}>No disruptions recorded yet</p>
-                <p className="sans" style={{ fontSize: 12, color: 'var(--ink-30)', marginTop: 4 }}>
-                  When weather or other disruptions affect your zone, they will appear here.
-                </p>
-              </div>
-            ) : (
-              <div style={{ position: 'relative', paddingLeft: 24 }}>
-                {/* Vertical timeline line */}
-                <div style={{
-                  position: 'absolute', left: 7, top: 0, bottom: 0, width: 2,
-                  background: 'var(--ink-10)', borderRadius: 1,
-                }} />
-
-                {monthKeys.map((mk) => {
-                  const monthClaims = analytics.claimsByMonth[mk];
-                  return (
-                    <div key={mk} style={{ marginBottom: 20 }}>
-                      {/* Month header */}
-                      <p className="mono" style={{
-                        fontSize: 10, color: 'var(--ink-60)', textTransform: 'uppercase',
-                        letterSpacing: '0.1em', marginBottom: 12, paddingBottom: 6,
-                        borderBottom: '1px solid var(--ink-10)', marginLeft: -24, paddingLeft: 24,
-                      }}>
-                        {mk}
-                      </p>
-
-                      {monthClaims.map((claim) => {
-                        const evt = claim.live_disruption_events;
-                        const eventType = (evt?.event_type || 'unknown') as DisruptionType;
-                        const trigger = TRIGGERS[eventType as keyof typeof TRIGGERS];
-                        const icon = DISRUPTION_ICONS[eventType] || '\u26A1';
-                        const label = trigger?.label || eventType.replace(/_/g, ' ');
-                        const city = evt?.city || '--';
-                        const trigVal = evt?.trigger_value;
-                        const trigThresh = evt?.trigger_threshold ?? trigger?.threshold;
-                        const unit = trigger?.unit || '';
-                        const isPaid = claim.status === 'paid' || claim.status === 'approved';
-                        const isRejected = claim.status === 'rejected';
-                        const isPending = !isPaid && !isRejected;
-                        const dotColor = isPaid ? '#F07820' : isPending ? '#F07820' : 'var(--red-acc)';
-
-                        // Find matching payout for UPI ref
-                        const matchingPayout = payouts.find((p) => p.claim_id === claim.id);
-
-                        return (
-                          <div key={claim.id} style={{ position: 'relative', marginBottom: 16 }}>
-                            {/* Timeline dot */}
-                            <div style={{
-                              position: 'absolute', left: -24, top: 8,
-                              width: 16, height: 16, borderRadius: '50%',
-                              background: dotColor,
-                              border: '3px solid var(--cream)',
-                              boxShadow: `0 0 0 2px ${dotColor}`,
-                              zIndex: 1,
-                            }} />
-
-                            {/* Card */}
-                            <div style={{
-                              background: 'var(--cream-d)', borderRadius: 12,
-                              padding: '12px 14px', border: '1px solid var(--rule)',
-                            }}>
-                              {/* Top row: icon + label + status */}
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                                  <span style={{ fontSize: 18, lineHeight: 1 }}>{icon}</span>
-                                  <div style={{ minWidth: 0 }}>
-                                    <p className="sans" style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink)', lineHeight: 1.3 }}>
-                                      {label}
-                                    </p>
-                                    <p className="mono" style={{ fontSize: 10, color: 'var(--ink-30)', marginTop: 1 }}>
-                                      {formatDate(claim.created_at)} &middot; {city}
-                                    </p>
-                                  </div>
-                                </div>
-                                <span className="mono" style={{
-                                  fontSize: 9, fontWeight: 600, padding: '2px 8px', borderRadius: 4,
-                                  border: `1px solid ${claimStatusColor(claim.status)}`,
-                                  color: claimStatusColor(claim.status), whiteSpace: 'nowrap', marginLeft: 8,
-                                }}>
-                                  {claim.status.replace(/_/g, ' ')}
-                                </span>
-                              </div>
-
-                              {/* Trigger detail */}
-                              {trigVal != null && trigThresh != null && (
-                                <p className="sans" style={{
-                                  fontSize: 12, color: 'var(--ink-60)', marginTop: 8,
-                                  padding: '6px 8px', background: 'rgba(17,16,16,0.03)', borderRadius: 6,
-                                }}>
-                                  {label} &mdash; {trigVal}{unit} detected (threshold: {trigThresh}{unit})
-                                </p>
-                              )}
-
-                              {/* Payout amount + gates + UPI ref */}
-                              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <p className="serif" style={{
-                                    fontSize: 18, fontWeight: 900,
-                                    color: isPaid ? '#F07820' : isRejected ? 'var(--red-acc)' : 'var(--ink)',
-                                  }}>
-                                    {formatINR(claim.payout_amount_inr)}
-                                  </p>
-                                  {/* Gates */}
-                                  <div style={{ display: 'flex', gap: 4 }}>
-                                    <span style={{
-                                      width: 6, height: 6, borderRadius: '50%',
-                                      background: claim.gate1_passed ? '#F07820' : 'var(--ink-10)',
-                                    }} title="Gate 1" />
-                                    <span style={{
-                                      width: 6, height: 6, borderRadius: '50%',
-                                      background: claim.gate2_passed ? '#F07820' : 'var(--ink-10)',
-                                    }} title="Gate 2" />
-                                  </div>
-                                </div>
-                                {matchingPayout?.mock_upi_ref && (
-                                  <span className="mono" style={{ fontSize: 9, color: 'var(--ink-30)' }}>
-                                    UPI: {matchingPayout.mock_upi_ref}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* ---------------------------------------------------------------- */}
-          {/* Payment Ledger — with sub-tabs and collapsible                    */}
-          {/* ---------------------------------------------------------------- */}
-          <PaymentLedger entries={analytics.ledger} formatDate={formatDate} formatINR={formatINR} />
-        </div>
-      )}
     </div>
   );
 }
