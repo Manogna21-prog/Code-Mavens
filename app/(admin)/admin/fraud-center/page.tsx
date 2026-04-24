@@ -2,10 +2,14 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { CITIES } from '@/lib/config/cities';
-import { DISRUPTION_TYPES, TRIGGERS, FRAUD } from '@/lib/config/constants';
+import { TRIGGERS, FRAUD } from '@/lib/config/constants';
 import type { DisruptionType } from '@/lib/config/constants';
-import { ShieldAlert, Zap, AlertTriangle, Users, Activity, Eye, RefreshCw, Clock, MapPin, Wifi, Fingerprint, BarChart3 } from 'lucide-react';
+import {
+  ShieldAlert, AlertTriangle, Users, Activity, Eye, RefreshCw, Clock,
+  MapPin, BarChart3, UserCheck, MapPinOff, UsersRound, Layers,
+  FlaskConical, Sparkles, Target, ShieldCheck,
+} from 'lucide-react';
+import { computeFraudScore, type FraudSignalsInput } from '@/lib/fraud/scoring';
 
 /* ═══════ Types ═══════ */
 
@@ -39,27 +43,21 @@ interface ClusterRow {
   last_claim_at: string;
 }
 
-interface SimResult {
-  status: string;
-  event_id?: string;
-  claims_created?: number;
-  payouts_completed?: number;
-  message?: string;
-  error?: string;
-}
-
 /* ═══════ Palette ═══════ */
 
 const F = "var(--font-inter),'Inter',sans-serif";
 const M = "var(--font-ibm-plex-mono),'IBM Plex Mono',monospace";
 
+// Badges shown on per-claim rows. New weighted signals up top; legacy
+// (system-health) signals kept so historical DB rows still render a label.
 const SIGNAL_CONFIG: Record<string, { label: string; icon: typeof AlertTriangle; color: string; weight: number }> = {
-  duplicate:            { label: 'Duplicate Claim',    icon: AlertTriangle, color: '#EF4444', weight: FRAUD.WEIGHTS.duplicate },
-  rapid_claims:         { label: 'Rapid Claims',       icon: Clock,         color: '#F59E0B', weight: FRAUD.WEIGHTS.rapid_claims },
-  weather_mismatch:     { label: 'Weather Mismatch',   icon: Activity,      color: '#8B5CF6', weight: FRAUD.WEIGHTS.weather_mismatch },
-  location_anomaly:     { label: 'Location Anomaly',   icon: MapPin,        color: '#EC4899', weight: FRAUD.WEIGHTS.location_anomaly },
-  cluster:              { label: 'Cluster/Syndicate',   icon: Users,         color: '#3B82F6', weight: FRAUD.WEIGHTS.cluster },
-  daily_limit_exceeded: { label: 'Daily Limit',        icon: BarChart3,     color: '#F97316', weight: 0 },
+  trust_history:        { label: 'Prior History & Trust', icon: UserCheck,     color: '#6366F1', weight: FRAUD.WEIGHTS.trust_history },
+  location_anomaly:     { label: 'Location Integrity',    icon: MapPin,        color: '#EC4899', weight: FRAUD.WEIGHTS.location_anomaly },
+  cluster:              { label: 'Cluster / Syndicate',   icon: Users,         color: '#3B82F6', weight: FRAUD.WEIGHTS.cluster },
+  duplicate:            { label: 'Duplicate Claim',       icon: AlertTriangle, color: '#EF4444', weight: 0 },
+  rapid_claims:         { label: 'Rapid Claims',          icon: Clock,         color: '#F59E0B', weight: 0 },
+  weather_mismatch:     { label: 'Weather Mismatch',      icon: Activity,      color: '#8B5CF6', weight: 0 },
+  daily_limit_exceeded: { label: 'Daily Limit',           icon: BarChart3,     color: '#F97316', weight: 0 },
 };
 
 const ROW_GRADS = [
@@ -70,20 +68,82 @@ const ROW_GRADS = [
   'linear-gradient(90deg, rgba(249,115,22,0.04), rgba(250,204,21,0.02))',
 ];
 
+/* ═══════ Simulator data ═══════ */
+
+type Preset = 'clean' | 'spoof' | 'ring' | 'mixed';
+
+const PRESETS: Record<Preset, { label: string; desc: string; icon: typeof UserCheck; gradient: string; input: FraudSignalsInput }> = {
+  clean: {
+    label: 'Honest driver',
+    desc: 'Long tenure, clean history, GPS matches IP',
+    icon: ShieldCheck,
+    gradient: 'linear-gradient(135deg, #22C55E, #16A34A)',
+    input: {
+      trust_history:    { trustScore: 0.85, priorFlaggedCount: 0, confirmedFraudCount: 0, tenureMonths: 14 },
+      location_anomaly: { gpsToIpDistanceKm: 3, impossibleTravel: false },
+      cluster:          { claimCountInWindow: 4, uniqueDevices: 4, sharedIpsAcrossProfiles: 0, lowGpsEntropy: false },
+    },
+  },
+  spoof: {
+    label: 'GPS spoof',
+    desc: 'Phone GPS disagrees with IP, impossible travel',
+    icon: MapPinOff,
+    gradient: 'linear-gradient(135deg, #EC4899, #F97316)',
+    input: {
+      trust_history:    { trustScore: 0.45, priorFlaggedCount: 1, confirmedFraudCount: 0, tenureMonths: 2 },
+      location_anomaly: { gpsToIpDistanceKm: 180, impossibleTravel: true },
+      cluster:          { claimCountInWindow: 2, uniqueDevices: 2, sharedIpsAcrossProfiles: 0, lowGpsEntropy: false },
+    },
+  },
+  ring: {
+    label: 'Fraud ring',
+    desc: 'Many accounts, shared devices and IPs, clustered GPS',
+    icon: UsersRound,
+    gradient: 'linear-gradient(135deg, #3B82F6, #6366F1)',
+    input: {
+      trust_history:    { trustScore: 0.5, priorFlaggedCount: 0, confirmedFraudCount: 0, tenureMonths: 1 },
+      location_anomaly: { gpsToIpDistanceKm: 8, impossibleTravel: false },
+      cluster:          { claimCountInWindow: 25, uniqueDevices: 6, sharedIpsAcrossProfiles: 3, lowGpsEntropy: true },
+    },
+  },
+  mixed: {
+    label: 'Mixed signals',
+    desc: 'Some concerns across multiple axes',
+    icon: Layers,
+    gradient: 'linear-gradient(135deg, #F59E0B, #EF4444)',
+    input: {
+      trust_history:    { trustScore: 0.4, priorFlaggedCount: 2, confirmedFraudCount: 1, tenureMonths: 4 },
+      location_anomaly: { gpsToIpDistanceKm: 70, impossibleTravel: false },
+      cluster:          { claimCountInWindow: 12, uniqueDevices: 5, sharedIpsAcrossProfiles: 1, lowGpsEntropy: false },
+    },
+  },
+};
+
+const SIGNAL_ICONS = {
+  trust_history: UserCheck,
+  location_anomaly: MapPin,
+  cluster: Users,
+} as const;
+
+const SIGNAL_GRADS = {
+  trust_history: 'linear-gradient(135deg, #6366F1, #8B5CF6)',
+  location_anomaly: 'linear-gradient(135deg, #EC4899, #F43F5E)',
+  cluster: 'linear-gradient(135deg, #3B82F6, #06B6D4)',
+} as const;
+
+const DECISION_META = {
+  auto_approve: { label: 'Auto-approve → pay instantly', color: '#22C55E', Icon: ShieldCheck },
+  flag:         { label: 'Approve but flag for monitoring', color: '#F59E0B', Icon: AlertTriangle },
+  manual_review:{ label: 'Send to manual review', color: '#EF4444', Icon: ShieldAlert },
+} as const;
+
 /* ═══════ Page ═══════ */
 
 export default function FraudCenterPage() {
   const [claims, setClaims] = useState<ClaimRow[]>([]);
   const [clusters, setClusters] = useState<ClusterRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<'overview' | 'flagged' | 'simulator' | 'clusters'>('overview');
-
-  // Simulator state
-  const [simCity, setSimCity] = useState(CITIES[0].slug);
-  const [simType, setSimType] = useState<DisruptionType>(DISRUPTION_TYPES[0]);
-  const [simCount, setSimCount] = useState(1);
-  const [simRunning, setSimRunning] = useState(false);
-  const [simResults, setSimResults] = useState<SimResult[]>([]);
+  const [tab, setTab] = useState<'simulator' | 'flagged' | 'clusters'>('simulator');
 
   const loadData = useCallback(async () => {
     const supabase = createClient();
@@ -102,6 +162,8 @@ export default function FraudCenterPage() {
     setLoading(false);
   }, []);
 
+  // setState calls happen after await inside loadData — linter can't statically prove that.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadData(); }, [loadData]);
 
   /* Computed */
@@ -110,53 +172,6 @@ export default function FraudCenterPage() {
   const pendingReview = useMemo(() => claims.filter(c => c.status === 'pending_review'), [claims]);
   const rejectedClaims = useMemo(() => claims.filter(c => c.status === 'rejected'), [claims]);
   const avgFraudScore = useMemo(() => claims.length > 0 ? claims.reduce((s, c) => s + c.fraud_score, 0) / claims.length : 0, [claims]);
-
-  // Signal distribution
-  const signalCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const c of claims) {
-      if (!c.fraud_signals) continue;
-      for (const [key, val] of Object.entries(c.fraud_signals)) {
-        if (val) counts[key] = (counts[key] || 0) + 1;
-      }
-    }
-    return counts;
-  }, [claims]);
-
-  // Gate 2 stats
-  const gate2Stats = useMemo(() => {
-    let passed = 0, failed = 0, pending = 0;
-    for (const c of claims) {
-      if (c.gate2_passed === true) passed++;
-      else if (c.gate2_passed === false) failed++;
-      else pending++;
-    }
-    return { passed, failed, pending };
-  }, [claims]);
-
-  /* Simulator */
-  async function runSimulation() {
-    setSimRunning(true);
-    setSimResults([]);
-    const results: SimResult[] = [];
-    for (let i = 0; i < simCount; i++) {
-      try {
-        const res = await fetch('/api/admin/demo-trigger', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ city: simCity, event_type: simType, severity: 7 + Math.random() * 3 }),
-        });
-        const data = await res.json() as SimResult;
-        results.push(data);
-      } catch (err) {
-        results.push({ status: 'error', error: err instanceof Error ? err.message : 'Failed' });
-      }
-    }
-    setSimResults(results);
-    setSimRunning(false);
-    // Reload data to see new claims
-    await loadData();
-  }
 
   /* Review handler */
   async function handleReview(claimId: string, action: 'approve' | 'reject') {
@@ -182,6 +197,15 @@ export default function FraudCenterPage() {
         @keyframes fSlide { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
         .f-s { animation: fSlide 0.4s ease both; }
         .f-s1{animation-delay:.05s} .f-s2{animation-delay:.1s} .f-s3{animation-delay:.15s} .f-s4{animation-delay:.2s}
+        @keyframes simPulse { 0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.0);} 50%{box-shadow:0 0 0 6px rgba(239,68,68,0.10);} }
+        .sim-triggered { animation: simPulse 2.4s ease-in-out infinite; }
+        @keyframes simPop { 0%{transform:scale(0.96); opacity:0.4} 100%{transform:scale(1); opacity:1} }
+        .sim-pop { animation: simPop 0.25s ease-out; }
+        @keyframes simGrow { from{width:0} }
+        .sim-grow { animation: simGrow 0.5s ease-out; }
+        .sim-preset { transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .sim-preset:hover { transform: translateY(-3px); box-shadow: 0 10px 24px rgba(99,102,241,0.18); }
+        .sim-slider { accent-color: #8B5CF6; }
       `}</style>
 
       <div className="flex items-center justify-between">
@@ -218,10 +242,9 @@ export default function FraudCenterPage() {
       {/* Tabs */}
       <div className="f-s f-s2 flex gap-2">
         {[
-          { id: 'overview' as const, label: 'Fraud Signals', icon: Activity },
+          { id: 'simulator' as const, label: 'Fraud Simulator', icon: FlaskConical },
           { id: 'flagged' as const, label: `Flagged & Rejected (${flaggedClaims.length + rejectedClaims.length})`, icon: AlertTriangle },
           { id: 'clusters' as const, label: `Cluster Signals (${clusters.length})`, icon: Users },
-          { id: 'simulator' as const, label: 'Fraud Simulator', icon: Zap },
         ].map(t => {
           const Icon = t.icon;
           return (
@@ -238,80 +261,8 @@ export default function FraudCenterPage() {
         })}
       </div>
 
-      {/* ═══════ Tab: Fraud Signals Overview ═══════ */}
-      {tab === 'overview' && (
-        <div className="f-s f-s3 space-y-4">
-          {/* Signal distribution */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F, marginBottom: 12 }}>Signal Distribution</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {Object.entries(SIGNAL_CONFIG).map(([key, cfg]) => {
-                  const count = signalCounts[key] || 0;
-                  const pct = totalClaims > 0 ? (count / totalClaims) * 100 : 0;
-                  const Icon = cfg.icon;
-                  return (
-                    <div key={key}>
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                          <Icon size={14} style={{ color: cfg.color }} />
-                          <span style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', fontFamily: F }}>{cfg.label}</span>
-                          {cfg.weight > 0 && <span style={{ fontSize: 9, color: '#9CA3AF', fontFamily: M }}>weight: {(cfg.weight * 100).toFixed(0)}%</span>}
-                        </div>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: cfg.color, fontFamily: M }}>{count}</span>
-                      </div>
-                      <div style={{ height: 6, borderRadius: 3, background: '#F3F4F6', overflow: 'hidden' }}>
-                        <div style={{ height: '100%', borderRadius: 3, background: cfg.color, width: `${Math.max(pct, 1)}%`, transition: 'width 0.6s ease' }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Gate 2 verification stats */}
-            <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F, marginBottom: 12 }}>Gate 2 Verification</h3>
-              <div className="flex items-center gap-4 mb-4">
-                {[
-                  { label: 'Passed', value: gate2Stats.passed, color: '#22C55E' },
-                  { label: 'Failed', value: gate2Stats.failed, color: '#EF4444' },
-                  { label: 'Pending', value: gate2Stats.pending, color: '#F59E0B' },
-                ].map(s => (
-                  <div key={s.label} style={{ flex: 1, textAlign: 'center', padding: '12px 0', borderRadius: 12, background: `${s.color}10`, border: `1px solid ${s.color}20` }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: s.color, fontFamily: F }}>{s.value}</div>
-                    <div style={{ fontSize: 10, color: '#6B7280', fontFamily: M, marginTop: 2 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F, marginBottom: 12, marginTop: 16 }}>Fraud Routing</h3>
-              <div className="flex items-center gap-4">
-                {[
-                  { label: 'Auto-Approved', value: claims.filter(c => c.fraud_score < FRAUD.AUTO_APPROVE_THRESHOLD && c.status !== 'rejected').length, color: '#22C55E' },
-                  { label: 'Flagged (Paid)', value: claims.filter(c => c.fraud_score >= FRAUD.AUTO_APPROVE_THRESHOLD && c.fraud_score < FRAUD.MANUAL_REVIEW_THRESHOLD && c.status !== 'rejected').length, color: '#F59E0B' },
-                  { label: 'Auto-Rejected', value: claims.filter(c => c.fraud_score >= FRAUD.MANUAL_REVIEW_THRESHOLD || c.status === 'rejected').length, color: '#EF4444' },
-                ].map(s => (
-                  <div key={s.label} style={{ flex: 1, textAlign: 'center', padding: '12px 0', borderRadius: 12, background: `${s.color}10`, border: `1px solid ${s.color}20` }}>
-                    <div style={{ fontSize: 22, fontWeight: 800, color: s.color, fontFamily: F }}>{s.value}</div>
-                    <div style={{ fontSize: 10, color: '#6B7280', fontFamily: M, marginTop: 2 }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Thresholds reference */}
-              <div style={{ marginTop: 16, padding: 12, borderRadius: 10, background: '#F9FAFB', border: '1px solid #F3F4F6' }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', fontFamily: M, marginBottom: 6 }}>FRAUD SCORE THRESHOLDS</div>
-                <div className="flex gap-2">
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 8, background: 'rgba(34,197,94,0.1)', color: '#22C55E', fontFamily: M }}>&lt;{(FRAUD.AUTO_APPROVE_THRESHOLD * 100).toFixed(0)}% Auto-Approve + Pay</span>
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 8, background: 'rgba(245,158,11,0.1)', color: '#F59E0B', fontFamily: M }}>{(FRAUD.AUTO_APPROVE_THRESHOLD * 100).toFixed(0)}%-{(FRAUD.MANUAL_REVIEW_THRESHOLD * 100).toFixed(0)}% Approve + Flag</span>
-                  <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 8, background: 'rgba(239,68,68,0.1)', color: '#EF4444', fontFamily: M }}>&ge;{(FRAUD.MANUAL_REVIEW_THRESHOLD * 100).toFixed(0)}% Auto-Reject</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ═══════ Tab: Fraud Simulator ═══════ */}
+      {tab === 'simulator' && <SimulatorTab />}
 
       {/* ═══════ Tab: Flagged Claims ═══════ */}
       {tab === 'flagged' && (
@@ -375,11 +326,18 @@ export default function FraudCenterPage() {
                         <span style={{ fontSize: 10, color: '#6B7280', display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{claim.flag_reason || '-'}</span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <span style={{
-                          fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 10, fontFamily: M, display: 'inline-block',
-                          background: claim.status === 'rejected' ? 'linear-gradient(135deg, #EF4444, #DC2626)' : claim.status === 'paid' ? 'linear-gradient(135deg, #22C55E, #16A34A)' : claim.status === 'approved' ? 'rgba(34,197,94,0.1)' : 'rgba(107,114,128,0.1)',
-                          color: claim.status === 'rejected' || claim.status === 'paid' ? '#fff' : claim.status === 'approved' ? '#22C55E' : '#6B7280',
-                        }}>{claim.status}</span>
+                        {claim.status === 'pending_review' ? (
+                          <div className="flex gap-1">
+                            <button onClick={() => handleReview(claim.id, 'approve')} style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #22C55E, #16A34A)', color: '#fff', fontFamily: M }}>Approve</button>
+                            <button onClick={() => handleReview(claim.id, 'reject')} style={{ fontSize: 10, fontWeight: 600, padding: '3px 8px', borderRadius: 8, border: 'none', cursor: 'pointer', background: 'linear-gradient(135deg, #EF4444, #DC2626)', color: '#fff', fontFamily: M }}>Reject</button>
+                          </div>
+                        ) : (
+                          <span style={{
+                            fontSize: 10, fontWeight: 600, padding: '3px 10px', borderRadius: 10, fontFamily: M, display: 'inline-block',
+                            background: claim.status === 'rejected' ? 'linear-gradient(135deg, #EF4444, #DC2626)' : claim.status === 'paid' ? 'linear-gradient(135deg, #22C55E, #16A34A)' : claim.status === 'approved' ? 'rgba(34,197,94,0.1)' : 'rgba(107,114,128,0.1)',
+                            color: claim.status === 'rejected' || claim.status === 'paid' ? '#fff' : claim.status === 'approved' ? '#22C55E' : '#6B7280',
+                          }}>{claim.status}</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -429,179 +387,355 @@ export default function FraudCenterPage() {
               </table>
             </div>
           ) : (
-            <div className="p-12 text-center" style={{ color: '#9CA3AF' }}>No cluster signals detected yet. Fire multiple rapid triggers to test.</div>
-          )}
-        </div>
-      )}
-
-      {/* ═══════ Tab: Fraud Simulator ═══════ */}
-      {tab === 'simulator' && (
-        <div className="f-s f-s3 space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Simulator controls */}
-            <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F, marginBottom: 12 }}>Fire Test Triggers</h3>
-              <p style={{ fontSize: 12, color: '#6B7280', marginBottom: 16 }}>Rapidly fire multiple triggers to test fraud detection thresholds.</p>
-              <div className="space-y-3">
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#1A1A1A', fontFamily: M, display: 'block', marginBottom: 4 }}>City</label>
-                  <select value={simCity} onChange={e => setSimCity(e.target.value)} className="w-full rounded-lg px-3 py-2 text-sm" style={{ border: '1px solid #E8E8EA' }}>
-                    {CITIES.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#1A1A1A', fontFamily: M, display: 'block', marginBottom: 4 }}>Disruption Type</label>
-                  <select value={simType} onChange={e => setSimType(e.target.value as DisruptionType)} className="w-full rounded-lg px-3 py-2 text-sm" style={{ border: '1px solid #E8E8EA' }}>
-                    {DISRUPTION_TYPES.map(dt => <option key={dt} value={dt}>{TRIGGERS[dt].label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: '#1A1A1A', fontFamily: M, display: 'block', marginBottom: 4 }}>
-                    Number of triggers: <span style={{ color: '#8B5CF6', fontWeight: 800 }}>{simCount}</span>
-                  </label>
-                  <input type="range" min={1} max={10} value={simCount} onChange={e => setSimCount(Number(e.target.value))} className="w-full" style={{ accentColor: '#8B5CF6' }} />
-                  <div className="flex justify-between" style={{ fontSize: 9, color: '#9CA3AF' }}><span>1 (safe)</span><span>3 (rapid flag)</span><span>10 (cluster)</span></div>
-                </div>
-                <button onClick={runSimulation} disabled={simRunning} style={{
-                  width: '100%', padding: '10px 0', borderRadius: 12, fontSize: 13, fontWeight: 700, border: 'none', cursor: simRunning ? 'not-allowed' : 'pointer',
-                  background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
-                  opacity: simRunning ? 0.6 : 1, transition: 'all 0.2s',
-                }}>
-                  <Zap size={15} /> {simRunning ? `Firing ${simCount} triggers...` : `Fire ${simCount} Trigger${simCount > 1 ? 's' : ''}`}
-                </button>
-              </div>
-            </div>
-
-            {/* What to expect */}
-            <div className="rounded-2xl p-5" style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16 }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F, marginBottom: 12 }}>What Gets Tested</h3>
-              <div className="space-y-3">
-                {[
-                  { triggers: '1', test: 'Clean claim — should auto-approve if driver is in zone', color: '#22C55E' },
-                  { triggers: '3+', test: 'Rapid claims flag — 3+ in 24h triggers fraud signal (+20% score)', color: '#F59E0B' },
-                  { triggers: '5+', test: 'Daily limit — exceeds max claims per day', color: '#F97316' },
-                  { triggers: '10+', test: 'Cluster detection — syndicate pattern analysis kicks in (+10% score)', color: '#EF4444' },
-                ].map(item => (
-                  <div key={item.triggers} className="flex items-start gap-3" style={{ padding: '8px 10px', borderRadius: 10, background: `${item.color}08`, border: `1px solid ${item.color}15` }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: item.color, fontFamily: M, minWidth: 30, flexShrink: 0 }}>{item.triggers}</span>
-                    <span style={{ fontSize: 12, color: '#4B5563' }}>{item.test}</span>
-                  </div>
-                ))}
-              </div>
-              <div style={{ marginTop: 16, padding: 12, borderRadius: 10, background: '#F9FAFB', border: '1px solid #F3F4F6' }}>
-                <div style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', fontFamily: M, marginBottom: 4 }}>ALSO CHECKED PER CLAIM</div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { icon: MapPin, label: 'GPS vs IP integrity' },
-                    { icon: Wifi, label: 'Impossible travel' },
-                    { icon: Fingerprint, label: 'Device fingerprint' },
-                    { icon: Activity, label: 'Weather data match' },
-                    { icon: ShieldAlert, label: 'Trust score penalty' },
-                  ].map(c => {
-                    const Icon = c.icon;
-                    return (
-                      <span key={c.label} className="flex items-center gap-1" style={{ fontSize: 10, padding: '3px 8px', borderRadius: 8, background: 'rgba(99,102,241,0.06)', color: '#6366F1', fontFamily: M }}>
-                        <Icon size={10} /> {c.label}
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Simulation results */}
-          {simResults.length > 0 && (
-            <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16 }}>
-              <div className="px-5 py-3" style={{ borderBottom: '1px solid #E8E8EA' }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Simulation Results</h3>
-              </div>
-              <div className="p-4 space-y-2">
-                {simResults.map((r, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: r.error ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.06)', border: `1px solid ${r.error ? '#F8717120' : '#22C55E20'}` }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: r.error ? '#EF4444' : '#22C55E', fontFamily: M, minWidth: 20 }}>#{i + 1}</span>
-                    <span style={{ fontSize: 12, color: '#4B5563', flex: 1 }}>{r.error || r.message}</span>
-                    {r.claims_created != null && (
-                      <div className="flex gap-2">
-                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 8, background: 'rgba(99,102,241,0.08)', color: '#6366F1', fontFamily: M }}>{r.claims_created} claims</span>
-                        <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 8, background: r.payouts_completed ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)', color: r.payouts_completed ? '#22C55E' : '#EF4444', fontFamily: M }}>{r.payouts_completed ?? 0} paid</span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {/* Summary */}
-                <div style={{ marginTop: 8, padding: 12, borderRadius: 10, background: '#F9FAFB', border: '1px solid #F3F4F6' }}>
-                  <div style={{ fontSize: 11, color: '#6B7280', fontFamily: M }}>
-                    Total: {simResults.filter(r => !r.error).length} triggers fired &middot;{' '}
-                    {simResults.reduce((s, r) => s + (r.claims_created || 0), 0)} claims created &middot;{' '}
-                    {simResults.reduce((s, r) => s + (r.payouts_completed || 0), 0)} payouts completed
-                  </div>
-                  {simResults.reduce((s, r) => s + (r.claims_created || 0), 0) === 0 && (
-                    <div style={{ fontSize: 11, color: '#F59E0B', fontFamily: M, marginTop: 4 }}>
-                      No claims created — this usually means there are no active paid policies for {simCity} this week.
-                      Go to Policy Center to check, or create test policies via the onboarding flow.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Recent claims from this city — live view */}
-          {simResults.length > 0 && (
-            <div className="rounded-2xl overflow-hidden" style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16 }}>
-              <div className="px-5 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid #E8E8EA' }}>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>Recent Claims — {simCity}</h3>
-                <button onClick={loadData} style={{ fontSize: 10, padding: '3px 10px', borderRadius: 8, background: '#F3F4F6', color: '#6B7280', border: 'none', cursor: 'pointer', fontFamily: M }}>Refresh</button>
-              </div>
-              {(() => {
-                const cityClaims = claims.filter(c => (c.profiles?.city || c.live_disruption_events?.city) === simCity).slice(0, 10);
-                if (cityClaims.length === 0) return <div className="p-8 text-center" style={{ color: '#9CA3AF', fontSize: 12 }}>No claims found for {simCity}. Check if active policies exist.</div>;
-                return (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr style={{ background: 'linear-gradient(90deg, rgba(99,102,241,0.05), rgba(139,92,246,0.02))' }}>
-                          {['Driver', 'Status', 'Fraud Score', 'Signals', 'Gate 2', 'Payout', 'Time'].map(h => (
-                            <th key={h} className="px-3 py-2 text-left font-medium text-xs uppercase tracking-wide" style={{ color: '#6B7280', fontFamily: M }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cityClaims.map((c, idx) => {
-                          const scoreColor = c.fraud_score >= 0.7 ? '#EF4444' : c.fraud_score >= 0.3 ? '#F59E0B' : '#22C55E';
-                          const statusGrad = c.status === 'paid' ? 'linear-gradient(135deg, #22C55E, #16A34A)' : c.status === 'rejected' ? 'linear-gradient(135deg, #EF4444, #DC2626)' : c.status === 'approved' ? 'linear-gradient(135deg, #3B82F6, #06B6D4)' : 'linear-gradient(135deg, #6B7280, #9CA3AF)';
-                          const signals = Object.entries(c.fraud_signals || {}).filter(([, v]) => v).map(([k]) => k);
-                          return (
-                            <tr key={c.id} style={{ borderTop: '1px solid #F3F4F6', background: ROW_GRADS[idx % ROW_GRADS.length] }}>
-                              <td className="px-3 py-2 font-medium" style={{ fontSize: 12, color: '#1A1A1A' }}>{c.profiles?.full_name || 'Unknown'}</td>
-                              <td className="px-3 py-2"><span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 8, background: statusGrad, color: '#fff', fontFamily: M }}>{c.status}</span></td>
-                              <td className="px-3 py-2">
-                                <div className="flex items-center gap-2">
-                                  <div style={{ width: 28, height: 4, borderRadius: 2, background: '#F3F4F6', overflow: 'hidden' }}><div style={{ width: `${c.fraud_score * 100}%`, height: '100%', borderRadius: 2, background: scoreColor }} /></div>
-                                  <span style={{ fontSize: 10, fontWeight: 700, color: scoreColor, fontFamily: M }}>{(c.fraud_score * 100).toFixed(0)}%</span>
-                                </div>
-                              </td>
-                              <td className="px-3 py-2">
-                                <div className="flex flex-wrap gap-1">
-                                  {signals.length > 0 ? signals.map(s => <span key={s} style={{ fontSize: 8, padding: '1px 5px', borderRadius: 6, background: `${SIGNAL_CONFIG[s]?.color || '#6B7280'}15`, color: SIGNAL_CONFIG[s]?.color || '#6B7280', fontFamily: M }}>{s.replace(/_/g, ' ')}</span>) : <span style={{ fontSize: 9, color: '#D1D5DB' }}>clean</span>}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2"><span style={{ fontSize: 10, color: c.gate2_passed ? '#22C55E' : c.gate2_passed === false ? '#EF4444' : '#9CA3AF', fontWeight: 600, fontFamily: M }}>{c.gate2_passed ? 'Pass' : c.gate2_passed === false ? 'Fail' : '-'}</span></td>
-                              <td className="px-3 py-2" style={{ fontSize: 12, fontWeight: 700, color: '#1A1A1A', fontFamily: M }}>{'\u20B9'}{Number(c.payout_amount_inr).toLocaleString()}</td>
-                              <td className="px-3 py-2 mono" style={{ fontSize: 9, color: '#9CA3AF' }}>{new Date(c.created_at).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()}
-            </div>
+            <div className="p-12 text-center" style={{ color: '#9CA3AF' }}>No cluster signals detected yet.</div>
           )}
         </div>
       )}
     </div>
+  );
+}
+
+/* ═══════ Simulator ═══════ */
+
+function SimulatorTab() {
+  const [preset, setPreset] = useState<Preset>('mixed');
+  const [input, setInput] = useState<FraudSignalsInput>(PRESETS.mixed.input);
+
+  const result = useMemo(() => computeFraudScore(input), [input]);
+
+  function applyPreset(p: Preset) {
+    setPreset(p);
+    setInput(PRESETS[p].input);
+  }
+
+  const decision = DECISION_META[result.decision];
+
+  return (
+    <div className="f-s f-s3 space-y-5">
+      {/* Intro */}
+      <div className="rounded-2xl p-5" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.06), rgba(139,92,246,0.03))', border: '1px solid rgba(99,102,241,0.15)', borderRadius: 16 }}>
+        <div className="flex items-start gap-3">
+          <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #6366F1, #8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Sparkles size={17} style={{ color: '#fff' }} />
+          </div>
+          <div>
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F, marginBottom: 4 }}>
+              Simulate a claim&rsquo;s fraud score
+            </h3>
+            <p style={{ fontSize: 12, color: '#6B7280', lineHeight: 1.55 }}>
+              Pick a scenario or tune each signal manually. The score updates instantly. Only signals a driver or
+              ring can actually control are weighted — duplicate / rapid / weather-mismatch are backend health checks
+              surfaced elsewhere.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Preset scenarios */}
+      <div>
+        <div style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.06em', fontFamily: M, marginBottom: 10 }}>
+          Preset scenarios
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {(Object.keys(PRESETS) as Preset[]).map(p => {
+            const cfg = PRESETS[p];
+            const Icon = cfg.icon;
+            const active = preset === p;
+            return (
+              <button
+                key={p}
+                onClick={() => applyPreset(p)}
+                className="sim-preset rounded-2xl p-4 text-left"
+                style={{
+                  background: active ? cfg.gradient : '#fff',
+                  color: active ? '#fff' : '#1A1A1A',
+                  border: active ? 'none' : '1px solid #E8E8EA',
+                  cursor: 'pointer',
+                  borderRadius: 16,
+                }}
+              >
+                <div style={{
+                  width: 32, height: 32, borderRadius: 10,
+                  background: active ? 'rgba(255,255,255,0.2)' : `${cfg.gradient}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  marginBottom: 8,
+                }}>
+                  <Icon size={16} style={{ color: '#fff' }} />
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 700, fontFamily: F, marginBottom: 2 }}>{cfg.label}</div>
+                <div style={{ fontSize: 10, opacity: active ? 0.85 : 0.55, fontFamily: F, lineHeight: 1.4 }}>{cfg.desc}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Main grid: signal cards + score panel */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(280px,360px)] gap-4">
+        <div className="space-y-4">
+          <SignalCard
+            signal="trust_history"
+            title="Prior history & trust"
+            weight={FRAUD.WEIGHTS.trust_history}
+            blurb="Past flagged claims, confirmed fraud, and how long the account has been clean."
+            contribution={result.contributions.find(c => c.signal === 'trust_history')!}
+          >
+            <NumberRow label="Trust score (0–1)" min={0} max={1} step={0.05}
+              value={input.trust_history.trustScore}
+              onChange={v => setInput({ ...input, trust_history: { ...input.trust_history, trustScore: v } })} />
+            <NumberRow label="Prior flagged claims" min={0} max={20} step={1}
+              value={input.trust_history.priorFlaggedCount}
+              onChange={v => setInput({ ...input, trust_history: { ...input.trust_history, priorFlaggedCount: v } })} />
+            <NumberRow label="Confirmed fraud" min={0} max={10} step={1}
+              value={input.trust_history.confirmedFraudCount}
+              onChange={v => setInput({ ...input, trust_history: { ...input.trust_history, confirmedFraudCount: v } })} />
+            <NumberRow label="Tenure (months)" min={0} max={48} step={1}
+              value={input.trust_history.tenureMonths}
+              onChange={v => setInput({ ...input, trust_history: { ...input.trust_history, tenureMonths: v } })} />
+          </SignalCard>
+
+          <SignalCard
+            signal="location_anomaly"
+            title="Location integrity"
+            weight={FRAUD.WEIGHTS.location_anomaly}
+            blurb="GPS comes from the phone. IP comes from the network. A big mismatch means the phone is claiming to be somewhere it isn&rsquo;t."
+            contribution={result.contributions.find(c => c.signal === 'location_anomaly')!}
+          >
+            <NumberRow label="GPS ↔ IP distance (km)" min={0} max={500} step={1}
+              value={input.location_anomaly.gpsToIpDistanceKm ?? 0}
+              onChange={v => setInput({ ...input, location_anomaly: { ...input.location_anomaly, gpsToIpDistanceKm: v } })} />
+            <BoolRow label="Impossible travel (>50km in <30min)"
+              value={input.location_anomaly.impossibleTravel}
+              onChange={v => setInput({ ...input, location_anomaly: { ...input.location_anomaly, impossibleTravel: v } })} />
+          </SignalCard>
+
+          <SignalCard
+            signal="cluster"
+            title="Ring / cluster"
+            weight={FRAUD.WEIGHTS.cluster}
+            blurb="Many accounts claiming the same event from shared devices, IPs, or a single GPS spot."
+            contribution={result.contributions.find(c => c.signal === 'cluster')!}
+          >
+            <NumberRow label="Claims on this event in 10min" min={0} max={100} step={1}
+              value={input.cluster.claimCountInWindow}
+              onChange={v => setInput({ ...input, cluster: { ...input.cluster, claimCountInWindow: v } })} />
+            <NumberRow label="Unique devices among those claims" min={0} max={100} step={1}
+              value={input.cluster.uniqueDevices}
+              onChange={v => setInput({ ...input, cluster: { ...input.cluster, uniqueDevices: v } })} />
+            <NumberRow label="Shared IPs across profiles" min={0} max={20} step={1}
+              value={input.cluster.sharedIpsAcrossProfiles}
+              onChange={v => setInput({ ...input, cluster: { ...input.cluster, sharedIpsAcrossProfiles: v } })} />
+            <BoolRow label="Low GPS entropy (everyone at same spot)"
+              value={input.cluster.lowGpsEntropy}
+              onChange={v => setInput({ ...input, cluster: { ...input.cluster, lowGpsEntropy: v } })} />
+          </SignalCard>
+        </div>
+
+        <aside className="lg:sticky lg:top-6 self-start space-y-4">
+          {/* Score card */}
+          <div className="rounded-2xl p-5" style={{ background: '#fff', border: `2px solid ${decision.color}`, borderRadius: 16, transition: 'border-color 0.25s' }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: M }}>
+              Fraud score
+            </div>
+            <div key={Math.round(result.score * 100)} className="sim-pop" style={{ fontSize: 54, fontWeight: 800, color: decision.color, fontFamily: F, lineHeight: 1.05, marginTop: 6 }}>
+              {(result.score * 100).toFixed(0)}%
+            </div>
+            <div className="flex items-center gap-2 mt-2">
+              <decision.Icon size={14} style={{ color: decision.color }} />
+              <span style={{ fontSize: 12, fontWeight: 700, color: decision.color, fontFamily: F }}>{decision.label}</span>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ marginTop: 14, height: 8, borderRadius: 4, background: '#F3F4F6', overflow: 'hidden', position: 'relative' }}>
+              <div style={{
+                width: `${result.score * 100}%`,
+                height: '100%',
+                borderRadius: 4,
+                background: decision.color,
+                transition: 'width 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+              }} />
+              {/* Threshold markers */}
+              <div title="Auto-approve threshold" style={{ position: 'absolute', top: -2, left: `${FRAUD.AUTO_APPROVE_THRESHOLD * 100}%`, width: 2, height: 12, background: '#22C55E', opacity: 0.5 }} />
+              <div title="Manual review threshold" style={{ position: 'absolute', top: -2, left: `${FRAUD.MANUAL_REVIEW_THRESHOLD * 100}%`, width: 2, height: 12, background: '#EF4444', opacity: 0.5 }} />
+            </div>
+            <div className="flex justify-between mt-1" style={{ fontSize: 9, color: '#9CA3AF', fontFamily: M }}>
+              <span>0</span>
+              <span style={{ color: '#22C55E' }}>auto-pay &lt; {Math.round(FRAUD.AUTO_APPROVE_THRESHOLD * 100)}</span>
+              <span style={{ color: '#EF4444' }}>review ≥ {Math.round(FRAUD.MANUAL_REVIEW_THRESHOLD * 100)}</span>
+              <span>100</span>
+            </div>
+          </div>
+
+          {/* Breakdown */}
+          <div className="rounded-2xl p-4" style={{ background: '#fff', border: '1px solid #E8E8EA', borderRadius: 16 }}>
+            <div style={{ fontSize: 10, fontWeight: 600, color: '#9CA3AF', textTransform: 'uppercase', letterSpacing: '0.08em', fontFamily: M, marginBottom: 10 }}>
+              Score breakdown
+            </div>
+            <div className="space-y-3">
+              {result.contributions.map(c => {
+                const sig = c.signal as keyof typeof SIGNAL_ICONS;
+                const Icon = SIGNAL_ICONS[sig];
+                const grad = SIGNAL_GRADS[sig];
+                const triggered = c.triggered;
+                return (
+                  <div key={c.signal}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div style={{ width: 22, height: 22, borderRadius: 6, background: grad, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <Icon size={12} style={{ color: '#fff' }} />
+                        </div>
+                        <div className="min-w-0">
+                          <div style={{ fontSize: 12, fontWeight: 600, color: '#1A1A1A', fontFamily: F }}>
+                            {c.signal === 'trust_history' ? 'Trust' : c.signal === 'location_anomaly' ? 'Location' : 'Cluster'}
+                          </div>
+                          <div style={{ fontSize: 9, color: '#9CA3AF', fontFamily: M }}>
+                            sev {(c.severity * 100).toFixed(0)}% × weight {Math.round(c.weight * 100)}%
+                          </div>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: triggered ? '#EF4444' : '#D1D5DB', fontFamily: F }}>
+                        +{(c.contribution * 100).toFixed(0)}
+                      </div>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 2, background: '#F3F4F6', overflow: 'hidden' }}>
+                      <div style={{
+                        width: `${c.contribution * 100 / (c.weight || 1)}%`,
+                        height: '100%',
+                        borderRadius: 2,
+                        background: grad,
+                        transition: 'width 0.45s cubic-bezier(0.22, 1, 0.36, 1)',
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Weights pie-ish */}
+            <div style={{ marginTop: 14, padding: 10, borderRadius: 10, background: '#F9FAFB', border: '1px solid #F3F4F6' }}>
+              <div style={{ fontSize: 9, fontWeight: 600, color: '#9CA3AF', fontFamily: M, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                Model weights
+              </div>
+              <div className="flex h-2 rounded-full overflow-hidden" style={{ background: '#F3F4F6' }}>
+                <div title={`Trust ${Math.round(FRAUD.WEIGHTS.trust_history * 100)}%`} style={{ width: `${FRAUD.WEIGHTS.trust_history * 100}%`, background: SIGNAL_GRADS.trust_history }} />
+                <div title={`Location ${Math.round(FRAUD.WEIGHTS.location_anomaly * 100)}%`} style={{ width: `${FRAUD.WEIGHTS.location_anomaly * 100}%`, background: SIGNAL_GRADS.location_anomaly }} />
+                <div title={`Cluster ${Math.round(FRAUD.WEIGHTS.cluster * 100)}%`} style={{ width: `${FRAUD.WEIGHTS.cluster * 100}%`, background: SIGNAL_GRADS.cluster }} />
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
+    </div>
+  );
+}
+
+/* ═══════ Simulator sub-components ═══════ */
+
+type ContributionShape = ReturnType<typeof computeFraudScore>['contributions'][number];
+
+function SignalCard(props: {
+  signal: keyof typeof SIGNAL_ICONS;
+  title: string;
+  weight: number;
+  blurb: string;
+  contribution: ContributionShape;
+  children: React.ReactNode;
+}) {
+  const { signal, title, weight, blurb, contribution, children } = props;
+  const Icon = SIGNAL_ICONS[signal];
+  const grad = SIGNAL_GRADS[signal];
+  const active = contribution.triggered;
+
+  return (
+    <section
+      className={`rounded-2xl p-5 ${active ? 'sim-triggered' : ''}`}
+      style={{
+        background: '#fff',
+        border: `1px solid ${active ? '#EF4444' : '#E8E8EA'}`,
+        borderRadius: 16,
+        transition: 'border-color 0.25s',
+      }}
+    >
+      <div className="flex items-start justify-between mb-3 gap-3">
+        <div className="flex items-start gap-3 min-w-0">
+          <div style={{
+            width: 36, height: 36, borderRadius: 10, background: grad,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+          }}>
+            <Icon size={17} style={{ color: '#fff' }} />
+          </div>
+          <div className="min-w-0">
+            <h3 style={{ fontSize: 15, fontWeight: 700, color: '#1A1A1A', fontFamily: F }}>{title}</h3>
+            <p style={{ fontSize: 11, color: '#6B7280', marginTop: 2, lineHeight: 1.45 }}>{blurb}</p>
+          </div>
+        </div>
+        <span style={{
+          fontSize: 10, fontWeight: 700, padding: '3px 9px', borderRadius: 20,
+          background: `${grad}`, color: '#fff', fontFamily: M, whiteSpace: 'nowrap', flexShrink: 0,
+        }}>
+          {Math.round(weight * 100)}%
+        </span>
+      </div>
+      <div className="space-y-3">{children}</div>
+
+      <div className="flex items-center gap-2 mt-3" style={{ padding: '8px 10px', borderRadius: 10, background: active ? 'rgba(239,68,68,0.06)' : 'rgba(34,197,94,0.05)', border: `1px solid ${active ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.12)'}` }}>
+        <Target size={12} style={{ color: active ? '#EF4444' : '#22C55E', flexShrink: 0 }} />
+        <span style={{ fontSize: 11, color: active ? '#B91C1C' : '#15803D', fontFamily: F, flex: 1 }}>{contribution.reason}</span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: active ? '#EF4444' : '#9CA3AF', fontFamily: M, flexShrink: 0 }}>
+          +{(contribution.contribution * 100).toFixed(0)}
+        </span>
+      </div>
+    </section>
+  );
+}
+
+function NumberRow({ label, value, onChange, min, max, step }: {
+  label: string; value: number; onChange: (v: number) => void; min: number; max: number; step: number;
+}) {
+  return (
+    <label className="block">
+      <div className="flex justify-between items-center mb-1">
+        <span style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', fontFamily: F }}>{label}</span>
+        <span style={{ fontSize: 11, fontWeight: 700, color: '#1A1A1A', fontFamily: M, padding: '2px 8px', borderRadius: 6, background: '#F3F4F6' }}>
+          {value}
+        </span>
+      </div>
+      <input
+        className="sim-slider w-full"
+        type="range"
+        min={min} max={max} step={step}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+      />
+    </label>
+  );
+}
+
+function BoolRow({ label, value, onChange }: {
+  label: string; value: boolean; onChange: (v: boolean) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      className="w-full flex items-center justify-between"
+      style={{
+        padding: '9px 12px', borderRadius: 10,
+        background: value ? 'rgba(239,68,68,0.06)' : '#F9FAFB',
+        border: `1px solid ${value ? 'rgba(239,68,68,0.25)' : '#E8E8EA'}`,
+        cursor: 'pointer', transition: 'all 0.15s',
+      }}
+    >
+      <span style={{ fontSize: 11, fontWeight: 600, color: value ? '#B91C1C' : '#4B5563', fontFamily: F, textAlign: 'left' }}>{label}</span>
+      <span style={{
+        width: 34, height: 20, borderRadius: 10, position: 'relative',
+        background: value ? '#EF4444' : '#D1D5DB', transition: 'background 0.18s', flexShrink: 0,
+      }}>
+        <span style={{
+          position: 'absolute', top: 2, left: value ? 16 : 2, width: 16, height: 16, borderRadius: '50%',
+          background: '#fff', transition: 'left 0.18s', boxShadow: '0 1px 2px rgba(0,0,0,0.15)',
+        }} />
+      </span>
+    </button>
   );
 }
