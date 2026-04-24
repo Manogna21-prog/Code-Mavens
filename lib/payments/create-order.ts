@@ -41,12 +41,29 @@ export async function createOrder({ profileId, planId }: CreateOrderInput): Prom
   // Amount in paise (Razorpay uses smallest currency unit)
   const amountPaise = plan.weekly_premium_inr * 100;
 
-  // Mock Razorpay order (no real API call needed)
-  const order = {
-    id: `order_mock_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`,
-    amount: amountPaise,
-    currency: 'INR',
-  };
+  // Use real Razorpay on localhost, mock on deployed
+  const isLocal = process.env.NODE_ENV === 'development' || process.env.VERCEL_ENV === undefined;
+
+  let order: { id: string; amount: number; currency: string };
+
+  if (isLocal) {
+    try {
+      const razorpay = getRazorpayClient();
+      const rzpOrder = await razorpay.orders.create({
+        amount: amountPaise,
+        currency: 'INR',
+        receipt: `ss_${profileId.slice(0, 8)}_${Date.now()}`,
+        notes: { plan_id: planId, plan_name: plan.name, profile_id: profileId },
+      });
+      order = { id: rzpOrder.id, amount: Number(rzpOrder.amount), currency: String(rzpOrder.currency) };
+    } catch {
+      // Fallback to mock if Razorpay fails locally
+      order = { id: `order_mock_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, amount: amountPaise, currency: 'INR' };
+    }
+  } else {
+    // Mock order for deployed environments
+    order = { id: `order_mock_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, amount: amountPaise, currency: 'INR' };
+  }
 
   // Insert payment_transaction record
   const { error: txError } = await supabase

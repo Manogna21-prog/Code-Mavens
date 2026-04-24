@@ -598,6 +598,78 @@ def get_city_zones(city: str):
     }
 
 
+class DriverVerifyRequest(BaseModel):
+    full_name: str
+    phone: str
+
+
+@app.post("/driver/verify")
+def verify_porter_driver(req: DriverVerifyRequest):
+    """Mock Porter API: Verify a driver exists in the Porter system by name + phone."""
+    import hashlib
+
+    name = req.full_name.strip()
+    phone = req.phone.strip().replace("+91", "").replace(" ", "")
+
+    if len(phone) != 10 or not phone.isdigit():
+        raise HTTPException(400, "Invalid phone number")
+    if len(name) < 2:
+        raise HTTPException(400, "Invalid name")
+
+    # Generate a deterministic porter_id from name + phone
+    raw = f"{name.lower()}:{phone}"
+    porter_id = "PTR-" + hashlib.sha256(raw.encode()).hexdigest()[:8].upper()
+
+    # Mock: all valid Indian numbers are "found" as Porter drivers
+    return {
+        "found": True,
+        "porter_id": porter_id,
+        "driver_name": name.title(),
+        "phone": phone,
+        "vehicle_type": "LCV",
+        "status": "active",
+        "city": "mumbai",
+        "joined": "2024-03-15",
+    }
+
+
+class VehicleVerifyRequest(BaseModel):
+    rc_number: str
+
+
+@app.post("/vehicle/verify")
+def verify_vehicle_lcv(req: VehicleVerifyRequest):
+    """Mock RTO/Vahan API: Verify vehicle is an LCV based on RC number."""
+    import hashlib
+
+    rc = req.rc_number.strip().upper().replace(" ", "")
+    if len(rc) < 8:
+        raise HTTPException(400, "Invalid RC number")
+
+    # Generate deterministic vehicle details from RC
+    reg_hash = hashlib.md5(rc.encode()).hexdigest()
+    chassis_no = f"MA1ZE2{reg_hash[:8].upper()}"
+
+    # LCV models commonly used by Porter
+    lcv_models = [
+        "Tata Ace Gold", "Mahindra Bolero Pickup",
+        "Ashok Leyland Dost", "Tata Intra V30",
+        "Mahindra Supro", "Eicher Pro 2049",
+    ]
+    model = lcv_models[int(reg_hash[:2], 16) % len(lcv_models)]
+
+    return {
+        "found": True,
+        "rc_number": rc,
+        "vehicle_type": "LCV",
+        "vehicle_class": "Light Commercial Vehicle",
+        "model": model,
+        "chassis_no": chassis_no,
+        "fuel_type": "Diesel",
+        "source": "Vahan / Ministry of Road Transport",
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8001)

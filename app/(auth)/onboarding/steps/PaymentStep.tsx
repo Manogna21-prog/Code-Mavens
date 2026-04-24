@@ -176,9 +176,6 @@ export default function PaymentStep({ tier, city, onNext, onBack }: PaymentStepP
         </button>
       </div>
 
-      <p className="mono text-xs text-center mt-4" style={{ color: 'var(--ink-30)' }}>
-        Powered by Razorpay. Payments are secure and encrypted.
-      </p>
     </div>
   );
 }

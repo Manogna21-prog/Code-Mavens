@@ -215,14 +215,14 @@ export async function GET(request: Request) {
         .limit(1)
         .single(),
 
-      // Next week policy (paid but not yet active)
+      // Next/pending policy (paid but not yet active — includes today for new users)
       admin
         .from('weekly_policies')
         .select('week_start_date, final_premium_inr, plan_packages(tier, name)')
         .eq('profile_id', user.id)
         .eq('is_active', false)
         .in('payment_status', ['paid', 'demo'])
-        .gt('week_start_date', today)
+        .gte('week_start_date', today)
         .order('week_start_date', { ascending: true })
         .limit(1)
         .single(),

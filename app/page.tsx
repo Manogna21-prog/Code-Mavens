@@ -580,9 +580,6 @@ export default function LandingPage() {
               <Link href="/login" className="ss-btn-signin">
                 Login
               </Link>
-              <Link href="/admin" className="ss-btn-admin ss-desktop-links">
-                Admin Dashboard
-              </Link>
 
               {/* Mobile menu toggle */}
               <button
@@ -621,10 +618,6 @@ export default function LandingPage() {
                       {l}
                     </a>
                   ))}
-                  <Link href="/admin" onClick={() => setMobileMenuOpen(false)}
-                    style={{ marginTop:12, textAlign:'center', background:'#111827', color:'#fff', padding:'13px', borderRadius:8, fontWeight:700, fontSize:15, textDecoration:'none' }}>
-                    Admin Dashboard
-                  </Link>
                 </div>
               </motion.div>
             )}
@@ -1815,7 +1808,7 @@ function DarkFooter() {
     },
     {
       heading: 'Links',
-      links: [['Register','/register'],['Sign In','/login'],['Admin Dashboard','/admin'],['Contact','/contact']],
+      links: [['Register','/register'],['Sign In','/login'],['Admin Dashboard','/login?role=admin'],['Contact','/contact']],
     },
   ];
 
