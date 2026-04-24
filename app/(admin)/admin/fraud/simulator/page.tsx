@@ -1,6 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { computeFraudScore, type FraudSignalsInput } from '@/lib/fraud/scoring';
+import { FRAUD } from '@/lib/config/constants';
 
 // Keep these labels in plain English — the simulator's whole purpose is to let
 // non-technical stakeholders poke the inputs and see the score change.
@@ -40,7 +42,6 @@ interface SimResponse {
   decision: 'auto_approve' | 'flag' | 'manual_review';
   contributions: Contribution[];
   thresholds: { auto_approve: number; manual_review: number };
-  error?: string;
 }
 
 type Profile = 'clean' | 'spoof' | 'ring' | 'mixed';
@@ -78,22 +79,20 @@ function profileToInput(p: Profile) {
 export default function FraudSimulatorPage() {
   const [profile, setProfile] = useState<Profile>('mixed');
   const [input, setInput] = useState(() => profileToInput('mixed'));
-  const [result, setResult] = useState<SimResponse | null>(null);
 
-  // Re-run on any change. The latest result stays on screen while the next
-  // request is in flight, so no loading spinner is needed.
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/admin/fraud/simulate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(input),
-      signal: controller.signal,
-    })
-      .then((r) => r.json())
-      .then((data: SimResponse) => setResult(data))
-      .catch(() => {});
-    return () => controller.abort();
+  // The scoring is pure math — no DB, no network. Compute it synchronously
+  // on every render so the UI updates instantly as the admin drags sliders.
+  const result = useMemo<SimResponse>(() => {
+    const r = computeFraudScore(input as FraudSignalsInput);
+    return {
+      score: r.score,
+      decision: r.decision,
+      contributions: r.contributions as Contribution[],
+      thresholds: {
+        auto_approve: FRAUD.AUTO_APPROVE_THRESHOLD,
+        manual_review: FRAUD.MANUAL_REVIEW_THRESHOLD,
+      },
+    };
   }, [input]);
 
   function applyProfile(p: Profile) {
@@ -102,7 +101,6 @@ export default function FraudSimulatorPage() {
   }
 
   const decisionColor = useMemo(() => {
-    if (!result) return 'var(--ink-60)';
     if (result.decision === 'manual_review') return 'var(--red-acc)';
     if (result.decision === 'flag') return '#b07a00';
     return 'var(--teal)';
