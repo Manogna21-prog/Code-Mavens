@@ -52,8 +52,11 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     async function loadProfile() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+      // Use getUser() not getSession() — getUser() round-trips to the auth
+      // server and returns a validated user, silencing Supabase's "could be
+      // insecure" warning that fires on cookie-only session reads.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
         router.push('/login');
         return;
       }
@@ -61,7 +64,7 @@ export default function OnboardingPage() {
       const { data } = await supabase
         .from('profiles')
         .select('language, dl_number, rc_number, upi_id, city, onboarding_status')
-        .eq('id', session.user.id)
+        .eq('id', user.id)
         .single();
 
       if (data) {
