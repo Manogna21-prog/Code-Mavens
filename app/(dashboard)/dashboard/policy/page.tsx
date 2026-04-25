@@ -918,7 +918,7 @@ export default function PolicyPage() {
               const day = ist.getDay();
               const hour = ist.getHours();
               const isRealWindow = (day === 0 && hour >= 6) || (day === 1 && hour < 6);
-              const isPaymentWindow = isRealWindow || process.env.NODE_ENV !== 'production'; // always show in dev
+              const isPaymentWindow = isRealWindow;
 
               // Next payment window
               const daysToSunday = day === 0 ? 7 : 7 - day;
