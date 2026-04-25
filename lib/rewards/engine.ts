@@ -224,19 +224,30 @@ export async function checkAndAwardCleanClaims(
     .from('parametric_claims')
     .select('*', { count: 'exact', head: true })
     .eq('profile_id', profileId)
-    .eq('fraud_flag', true)
+    .eq('is_flagged', true)
     .gte('created_at', sixMonthsAgo);
 
   if ((fraudClaims ?? 0) > 0) return { awarded: false };
 
-  // Check that user has had at least 1 policy in the last 6 months (not a dormant user)
+  // Must have been a member for at least 6 months
+  const { data: profileData } = await supabase
+    .from('profiles')
+    .select('created_at')
+    .eq('id', profileId)
+    .single();
+
+  if (!profileData) return { awarded: false };
+  const memberSince = new Date((profileData as { created_at: string }).created_at);
+  if (Date.now() - memberSince.getTime() < 180 * 24 * 60 * 60 * 1000) return { awarded: false };
+
+  // Must have at least 20 weeks of policy history (roughly 5 months active)
   const { count: policyCount } = await supabase
     .from('weekly_policies')
     .select('*', { count: 'exact', head: true })
     .eq('profile_id', profileId)
-    .gte('week_start_date', sixMonthsAgo.split('T')[0]);
+    .in('payment_status', ['paid', 'demo']);
 
-  if ((policyCount ?? 0) === 0) return { awarded: false };
+  if ((policyCount ?? 0) < 20) return { awarded: false };
 
   await awardCoins(profileId, 'clean_claims', COINS.CLEAN_CLAIMS_6_MONTHS, '6 months clean claims bonus');
   return { awarded: true };
